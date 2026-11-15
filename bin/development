@@ -1,0 +1,189 @@
+#!/usr/bin/env bash
+#
+# Starts the service for local testing, after checking every prerequisite the app would
+# otherwise fail on: the virtualenv, the dependencies, .env, the template bundles, Chromium
+# and a free port. Runs uvicorn in the foreground, so Ctrl-C stops it.
+#
+# Usage: bin/development [extra uvicorn arguments]
+#        bin/development --check          # run the checks only
+#        HOST=0.0.0.0 PORT=8020 RELOAD=0 bin/development
+
+set -euo pipefail
+
+readonly script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+readonly project_dir="$(dirname "${script_dir}")"
+readonly venv_dir="${project_dir}/.venv"
+readonly python="${venv_dir}/bin/python"
+readonly host="${HOST:-127.0.0.1}"
+readonly port="${PORT:-8010}"
+readonly reload="${RELOAD:-1}"
+
+checks_only=0
+if [[ "${1:-}" == "--check" ]]; then
+    checks_only=1
+    shift
+fi
+
+cd "${project_dir}"
+
+report() {
+    printf '  %-10s %s\n' "$1" "$2"
+}
+
+warn() {
+    echo "  warning    $1" >&2
+}
+
+fail() {
+    echo "${1}" >&2
+    shift
+    for line in "$@"; do
+        echo "    ${line}" >&2
+    done
+    exit 1
+}
+
+echo "contentgun-assets"
+
+if [[ ! -x "${python}" ]]; then
+    fail "No virtualenv at ${venv_dir}." \
+        "python3 -m venv .venv" \
+        ".venv/bin/pip install -r requirements-dev.txt" \
+        ".venv/bin/python -m playwright install chromium"
+fi
+report "python" "$("${python}" -c 'import platform; print(platform.python_version())')"
+
+# The entry points in .venv/bin hardcode the path the venv was created under, so a renamed
+# project directory breaks .venv/bin/pytest while .venv/bin/python keeps working.
+if [[ -f "${venv_dir}/bin/pytest" ]] \
+    && ! head -n 1 "${venv_dir}/bin/pytest" | grep -qF "${venv_dir}/bin/python"; then
+    warn "The .venv/bin entry points were written for a different path and will not run."
+    warn "Use '.venv/bin/python -m pytest' and '-m ruff', or recreate the virtualenv."
+fi
+
+missing_runtime="$("${python}" - <<'PY'
+import importlib.util
+
+names = ("fastapi", "uvicorn", "jinja2", "playwright", "pydantic_settings", "pyphen", "pypdf")
+print(" ".join(name for name in names if importlib.util.find_spec(name) is None))
+PY
+)"
+if [[ -n "${missing_runtime}" ]]; then
+    fail "Missing dependencies: ${missing_runtime}." \
+        ".venv/bin/pip install -r requirements-dev.txt"
+fi
+
+missing_dev="$("${python}" - <<'PY'
+import importlib.util
+
+names = ("pytest", "httpx", "asgi_lifespan", "PIL")
+print(" ".join(name for name in names if importlib.util.find_spec(name) is None))
+PY
+)"
+if [[ -n "${missing_dev}" ]]; then
+    report "packages" "runtime only, the test suite needs: ${missing_dev}"
+    warn "Install them with: .venv/bin/pip install -r requirements-dev.txt"
+else
+    report "packages" "runtime and test dependencies installed"
+fi
+
+if [[ ! -f "${project_dir}/.env" ]]; then
+    fail ".env is missing." \
+        "cp .env.example .env" \
+        "openssl rand -hex 32    # put the result in API_KEYS"
+fi
+
+api_keys_line="$(grep -E '^[[:space:]]*API_KEYS[[:space:]]*=' "${project_dir}/.env" | tail -n 1 || true)"
+api_key_count="$(printf '%s' "${api_keys_line#*=}" | tr ',' '\n' | grep -c '[^[:space:]"]' || true)"
+if [[ "${api_key_count}" -eq 0 ]]; then
+    fail "API_KEYS in .env is empty, so every authenticated route would answer 500." \
+        "openssl rand -hex 32    # put the result in API_KEYS"
+fi
+
+debug_routes="off"
+if grep -Eqi '^[[:space:]]*DEBUG_ROUTES[[:space:]]*=[[:space:]]*"?(1|true|yes|on)' "${project_dir}/.env"; then
+    debug_routes="on"
+fi
+report ".env" "${api_key_count} API key(s), debug routes ${debug_routes}"
+
+if ! bundle_state="$("${python}" - <<'PY'
+import sys
+
+from app.config import settings
+from app.rendering import validate_defaults
+from app.templating import TemplateRegistry
+
+try:
+    registry = TemplateRegistry.load(settings.bundles_dir)
+    validate_defaults(registry)
+except RuntimeError as error:
+    sys.exit(str(error))
+print(f"{len(registry.bundles)} bundle(s), {len(registry.ids)} templates")
+print(registry.root.resolve())
+PY
+)"; then
+    exit 1
+fi
+bundles_dir="$(tail -n 1 <<<"${bundle_state}")"
+report "bundles" "$(head -n 1 <<<"${bundle_state}") in ${bundles_dir}"
+
+if ! chromium_state="$("${python}" - <<'PY'
+import sys
+
+from playwright.sync_api import Error, sync_playwright
+
+try:
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True, args=["--disable-gpu"])
+        version = browser.version
+        browser.close()
+except Error as error:
+    sys.exit(f"Chromium could not be started: {str(error).splitlines()[0]}\n"
+             "    .venv/bin/python -m playwright install chromium")
+print(version)
+PY
+)"; then
+    exit 1
+fi
+report "chromium" "${chromium_state}"
+
+if command -v lsof >/dev/null 2>&1; then
+    listeners="$(lsof -ti "tcp:${port}" -sTCP:LISTEN || true)"
+    if [[ -n "${listeners}" ]]; then
+        fail "Port ${port} is already in use by PID $(echo "${listeners}" | tr '\n' ' ')." \
+            "Stop that process, or use another port: PORT=8011 bin/development"
+    fi
+fi
+report "port" "${port} free"
+
+# A SIGKILLed uvicorn leaves its browsers behind; they hold memory but not the port.
+if command -v pgrep >/dev/null 2>&1 && pgrep -f chromium_headless_shell >/dev/null 2>&1; then
+    warn "Chromium is still running from an earlier session: pkill -f chromium_headless_shell"
+fi
+
+echo
+report "service" "http://${host}:${port}"
+if [[ "${debug_routes}" == "on" ]]; then
+    report "preview" "http://${host}:${port}/v1/debug/html"
+    report "openapi" "http://${host}:${port}/docs"
+fi
+report "sample" 'API_KEY="$(sed -n "s/^API_KEYS=//p" .env | cut -d, -f1)" bash scripts/render_sample.sh'
+report "tests" ".venv/bin/python -m pytest -q"
+echo
+
+if [[ "${checks_only}" -eq 1 ]]; then
+    exit 0
+fi
+
+uvicorn_args=(--host "${host}" --port "${port}")
+if [[ "${reload}" != "0" ]]; then
+    # template.css and the Jinja templates are re-read per request, but template.toml and
+    # bundle.toml are only read at startup. Naming a reload directory replaces the default,
+    # so a bundle directory outside the project needs the project named next to it.
+    uvicorn_args+=(--reload --reload-include "*.toml")
+    if [[ "${bundles_dir}" != "${project_dir}"/* ]]; then
+        uvicorn_args+=(--reload-dir "${project_dir}" --reload-dir "${bundles_dir}")
+    fi
+fi
+
+exec "${python}" -m uvicorn app.main:app "${uvicorn_args[@]}" "$@"

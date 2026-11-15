@@ -1,0 +1,31 @@
+name = "demo"
+description = "A neutral demo bundle: slate cards with an amber accent, Space Grotesk headlines and Inter for every other text."
+
+[fonts]
+# Every template draws Space Grotesk 700 for the headline and Inter 400 for every other text.
+checks = ['700 40px "Space Grotesk"', '400 20px "Inter"']
+
+# Both files are variable fonts, so each face declares the full range of its weight axis.
+[[fonts.faces]]
+family = "Space Grotesk"
+file = "SpaceGrotesk-latin.woff2"
+weight = "300 700"
+subset = "latin"
+
+[[fonts.faces]]
+family = "Space Grotesk"
+file = "SpaceGrotesk-latin-ext.woff2"
+weight = "300 700"
+subset = "latin-ext"
+
+[[fonts.faces]]
+family = "Inter"
+file = "Inter-latin.woff2"
+weight = "100 900"
+subset = "latin"
+
+[[fonts.faces]]
+family = "Inter"
+file = "Inter-latin-ext.woff2"
+weight = "100 900"
+subset = "latin-ext"

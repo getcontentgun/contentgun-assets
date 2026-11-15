@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="de" style="--w: {{ width }}px; --h: {{ height }}px;" data-format="{{ format }}">
+  <head>
+    <meta charset="utf-8" />
+    <title>{{ fields.headline }}</title>
+    <style>
+{{ font_css }}
+{% include "_base/base.css" %}
+{{ css }}
+    </style>
+  </head>
+  <body>
+    <div class="card">
+{% block backdrop %}{% endblock %}
+      <div class="meta">
+        {% if fields.handle %}<span class="handle">{{ fields.handle }}</span>{% endif %}
+{% block meta_end %}{% endblock %}
+      </div>
+      <div class="stage">
+{% block stage %}{% endblock %}
+      </div>
+{% block footer %}{% endblock %}
+    </div>
+
+    <script>
+      (function () {
+        var FACES = {{ font_checks | tojson }};
+        var FIT = {{ 'true' if fit_text else 'false' }};
+
+        function pxVar(name) {
+          var raw = getComputedStyle(document.documentElement).getPropertyValue(name);
+          return parseFloat(raw);
+        }
+
+        function fit(element, box, minSize, maxSize) {
+          var low = Math.ceil(minSize);
+          var high = Math.floor(maxSize);
+          var best = low;
+          while (low <= high) {
+            var mid = Math.floor((low + high) / 2);
+            element.style.fontSize = mid + 'px';
+            var fits =
+              element.scrollHeight <= box.clientHeight &&
+              element.scrollWidth <= box.clientWidth;
+            if (fits) {
+              best = mid;
+              low = mid + 1;
+            } else {
+              high = mid - 1;
+            }
+          }
+          element.style.fontSize = best + 'px';
+        }
+
+        function fitAll() {
+          if (!FIT) return;
+          var elements = document.querySelectorAll('[data-fit]');
+          for (var i = 0; i < elements.length; i++) {
+            var element = elements[i];
+            var name = element.dataset.fit;
+            var minSize = pxVar('--' + name + '-min');
+            var maxSize = pxVar('--' + name + '-max');
+            if (isNaN(minSize) || isNaN(maxSize)) {
+              console.warn('Not fitting ' + name + ': --' + name + '-min or -max is missing.');
+              continue;
+            }
+            fit(element, element.parentElement, minSize, maxSize);
+          }
+        }
+
+        function imagesReady() {
+          var images = Array.prototype.slice.call(document.images);
+          return Promise.all(
+            images.map(function (image) {
+              return image.decode().catch(function () {
+                image.remove();
+              });
+            })
+          );
+        }
+
+        function markReady() {
+          document.documentElement.dataset.ready = '1';
+        }
+
+        Promise.all(
+          FACES.map(function (face) {
+            return document.fonts.load(face).catch(function () {
+              return null;
+            });
+          })
+        )
+          .then(function () {
+            return document.fonts.ready;
+          })
+          .then(imagesReady)
+          .then(function () {
+            fitAll();
+            requestAnimationFrame(function () {
+              requestAnimationFrame(markReady);
+            });
+          })
+          .catch(markReady);
+      })();
+    </script>
+  </body>
+</html>

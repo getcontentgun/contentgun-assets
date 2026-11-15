@@ -1,0 +1,45 @@
+:root {
+  --color-muted: #d5dde5;
+  --color-line: rgba(243, 239, 230, 0.4);
+
+  --headline-box-height: 52%;
+  --headline-max: 104px;
+  --headline-min: 40px;
+
+  --subline-box-height: 22%;
+  --subline-max: 40px;
+  --subline-min: 24px;
+}
+
+.backdrop {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+}
+
+.scrim {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    180deg,
+    rgba(30, 42, 54, 0.55) 0%,
+    rgba(30, 42, 54, 0.8) 45%,
+    rgba(30, 42, 54, 0.92) 100%
+  );
+}
+
+.stage {
+  justify-content: flex-end;
+}
+
+.subline-box {
+  max-height: var(--subline-box-height);
+}
+
+.subline {
+  font-size: var(--subline-max);
+  text-wrap: balance;
+}

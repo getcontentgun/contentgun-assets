@@ -1,0 +1,17 @@
+{% extends "_base/base.html.j2" %}
+
+{% block stage %}
+        <div class="bar"></div>
+        <div class="fit-box headline-box" id="headline-box">
+          <h1 class="headline" id="headline" data-fit="headline">{{ fields.headline | hyphenate }}</h1>
+        </div>
+        {% if fields.cta %}
+        <div class="fit-box cta-box" id="cta-box">
+          <p class="copy cta" id="cta" data-fit="cta">{{ fields.cta | hyphenate }}</p>
+        </div>
+        {% endif %}
+{% endblock %}
+
+{% block meta_end %}
+        {% if fields.pagination %}<span class="pagination">{{ fields.pagination }}</span>{% endif %}
+{% endblock %}

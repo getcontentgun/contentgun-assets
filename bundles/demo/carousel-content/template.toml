@@ -1,0 +1,19 @@
+name = "carousel-content"
+description = "Carousel content slide: an amber bar, the headline, body text, an optional image or icon under it, and the header row with handle and pagination. An icon is drawn in amber, or with icon_color 'text' in the text color; an image is shown as sent."
+formats = ["4:5", "1:1"]
+fields = ["headline", "body", "pagination", "handle", "icon_color"]
+required = ["headline"]
+image = true
+icon = true
+
+[defaults]
+body = ""
+pagination = ""
+handle = ""
+icon_color = "accent"
+
+[samples]
+headline = "Erst das Ziel, dann der Text"
+body = "Wer vor dem Schreiben festlegt, was ein Beitrag erreichen soll, braucht weniger Runden in der Abstimmung und trifft den Ton schneller."
+pagination = "2/5"
+handle = "@contentgun"

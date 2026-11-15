@@ -1,0 +1,14 @@
+name = "card"
+description = "Slate card: an amber bar above a large left-aligned headline, a subline under it, and the handle in the header row."
+formats = ["4:5"]
+fields = ["headline", "subline", "handle"]
+required = ["headline"]
+
+[defaults]
+subline = ""
+handle = ""
+
+[samples]
+headline = "Gute Vorlagen sparen jede Woche Stunden."
+subline = "Text rein, fertige Karte raus."
+handle = "@contentgun"

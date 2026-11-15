@@ -1,0 +1,82 @@
+:root {
+  --headline-box-height: 42%;
+  --headline-max: 80px;
+  --headline-min: 40px;
+
+  --body-box-height: 36%;
+  --body-max: 40px;
+  --body-min: 24px;
+
+  --icon-size: 240px;
+  --image-max-height: 300px;
+}
+
+:root[data-format="1:1"] {
+  --headline-box-height: 50%;
+  --body-box-height: 34%;
+  --icon-size: 180px;
+  --image-max-height: 225px;
+}
+
+/* With a graphic the text boxes shrink so that --icon-size stays free with both fields at
+   their limits. One rule per format: a shared :root:has() rule is no more specific than the
+   1:1 rule above and would override it by source order. */
+:root[data-format="4:5"]:has(.graphic) {
+  --headline-box-height: 36%;
+  --body-box-height: 28%;
+}
+
+:root[data-format="1:1"]:has(.graphic) {
+  --headline-box-height: 35%;
+  --body-box-height: 28%;
+}
+
+/* Only the image gives way when the stage runs short; a shrinking headline box would make
+   the fit pass pick a smaller headline than the text needs. */
+:root:has(.graphic) .headline-box {
+  flex-shrink: 0;
+}
+
+.body-box {
+  max-height: var(--body-box-height);
+}
+
+.body {
+  font-size: var(--body-max);
+}
+
+.graphic {
+  display: block;
+  max-width: 100%;
+  object-position: left top;
+}
+
+.graphic-image {
+  flex: 0 1 auto;
+  min-height: 0;
+  max-height: var(--image-max-height);
+  object-fit: scale-down;
+}
+
+.graphic-icon {
+  flex: 0 0 auto;
+  height: var(--icon-size);
+  object-fit: contain;
+  filter: url(#tint);
+}
+
+/* Hidden by size and out of flow: under display: none the filter no longer applies and the
+   icon renders black. */
+.tint {
+  position: absolute;
+  width: 0;
+  height: 0;
+}
+
+.tint-flood {
+  flood-color: var(--color-accent);
+}
+
+.tint[data-color="text"] .tint-flood {
+  flood-color: var(--color-text);
+}

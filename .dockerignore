@@ -1,0 +1,5 @@
+# The image copies app/ and requirements.txt only; add a path here when the Dockerfile copies more.
+*
+!app/
+!requirements.txt
+**/__pycache__

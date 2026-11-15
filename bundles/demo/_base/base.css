@@ -1,0 +1,156 @@
+:root {
+  --color-background: #1e2a36;
+  --color-text: #f3efe6;
+  --color-accent: #f2b33d;
+  --color-on-accent: #1e2a36;
+  --color-muted: #9aabbc;
+  --color-line: rgba(154, 171, 188, 0.35);
+
+  --padding-x: 96px;
+  --padding-top: 80px;
+  --padding-bottom: 96px;
+  --stage-gap: 40px;
+
+  --headline-box-height: 52%;
+  --headline-max: 104px;
+  --headline-min: 40px;
+
+  --meta-size: 24px;
+  --meta-height: 40px;
+  --meta-gap: 48px;
+
+  --bar-width: 96px;
+  --bar-height: 12px;
+}
+
+:root[data-format="1:1"] {
+  --meta-gap: 40px;
+  --stage-gap: 32px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--color-background);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: geometricPrecision;
+}
+
+.card {
+  position: relative;
+  width: var(--w);
+  height: var(--h);
+  display: flex;
+  flex-direction: column;
+  padding: var(--padding-top) var(--padding-x) var(--padding-bottom);
+  background: var(--color-background);
+  color: var(--color-text);
+}
+
+.meta {
+  position: relative;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  height: calc(var(--meta-height) + 26px);
+  padding-bottom: 24px;
+  margin-bottom: var(--meta-gap);
+  border-bottom: 2px solid var(--color-line);
+  font-family: "Inter", sans-serif;
+  font-weight: 400;
+  font-size: var(--meta-size);
+  line-height: 1.2;
+  color: var(--color-muted);
+}
+
+.handle {
+  /* Flex items default to min-width:auto, which would keep nowrap text at full
+     min-content width and stop the ellipsis from ever applying. */
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* margin-left: auto rather than space-between on .meta, which would pull it to the left
+   edge on a card without a handle. */
+.pagination {
+  flex: 0 0 auto;
+  margin-left: auto;
+  white-space: nowrap;
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.stage {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  text-align: left;
+  gap: var(--stage-gap);
+}
+
+/* The fit-text pass measures every [data-fit] element against its parent, so each one sits
+   alone in a box like this, and the box's max-height is the space it is fitted into. */
+.fit-box {
+  flex: 0 0 auto;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  overflow: hidden;
+}
+
+.headline-box {
+  flex: 0 1 auto;
+  max-height: var(--headline-box-height);
+}
+
+.bar {
+  flex: 0 0 auto;
+  width: var(--bar-width);
+  height: var(--bar-height);
+  background: var(--color-accent);
+}
+
+.headline {
+  margin: 0;
+  /* Space Grotesk's inline box is 1.27em tall, taller than the line-height, so without this
+     padding the first and last line spill out of the box and fit-text stops at its minimum. */
+  padding: 0.12em 0;
+  font-family: "Space Grotesk", sans-serif;
+  font-weight: 700;
+  font-size: var(--headline-max);
+  line-height: 1.08;
+  letter-spacing: -0.02em;
+  color: var(--color-text);
+  white-space: pre-line;
+  text-wrap: balance;
+  hyphens: manual;
+}
+
+.copy {
+  margin: 0;
+  padding: 0.1em 0;
+  font-family: "Inter", sans-serif;
+  font-weight: 400;
+  line-height: 1.45;
+  letter-spacing: 0;
+  color: var(--color-text);
+  white-space: pre-line;
+  text-wrap: pretty;
+  hyphens: manual;
+}

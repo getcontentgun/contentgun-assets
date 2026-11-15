@@ -1,0 +1,16 @@
+name = "card-image"
+description = "Card on a full-bleed background image under a slate gradient: the headline and subline at the bottom, the handle in the header row. Without an image it uses the bundle's fallback image."
+formats = ["4:5"]
+fields = ["headline", "subline", "handle"]
+required = ["headline"]
+image = true
+fallback_image = "backdrop.jpg"
+
+[defaults]
+subline = ""
+handle = ""
+
+[samples]
+headline = "Ein Bild trägt die Stimmung, die Zeile die Aussage."
+subline = "Das Bild kommt mit der Anfrage."
+handle = "@contentgun"

@@ -1,0 +1,26 @@
+{% extends "_base/base.html.j2" %}
+
+{% block stage %}
+        {% if fields.topic %}
+        <p class="topic" id="topic">{{ fields.topic | hyphenate }}</p>
+        {% else %}
+        <div class="bar"></div>
+        {% endif %}
+        <div class="fit-box headline-box" id="headline-box">
+          <h1 class="headline" id="headline" data-fit="headline">{{ fields.headline | hyphenate }}</h1>
+        </div>
+        {% if fields.subline %}
+        <div class="fit-box subline-box" id="subline-box">
+          <p class="copy subline" id="subline" data-fit="subline">{{ fields.subline | hyphenate }}</p>
+        </div>
+        {% endif %}
+{% endblock %}
+
+{% block footer %}
+      <div class="footer">
+        <svg class="arrow" viewBox="0 0 104 104" aria-hidden="true">
+          <circle class="arrow-disc" cx="52" cy="52" r="52" />
+          <path class="arrow-mark" d="M28 52 H74 M56 34 L74 52 L56 70" />
+        </svg>
+      </div>
+{% endblock %}

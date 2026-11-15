@@ -1,0 +1,29 @@
+{% extends "_base/base.html.j2" %}
+
+{% block stage %}
+        <div class="bar"></div>
+        <div class="fit-box headline-box" id="headline-box">
+          <h1 class="headline" id="headline" data-fit="headline">{{ fields.headline | hyphenate }}</h1>
+        </div>
+        {% if fields.body %}
+        <div class="fit-box body-box" id="body-box">
+          <p class="copy body" id="body" data-fit="body">{{ fields.body | hyphenate }}</p>
+        </div>
+        {% endif %}
+        {% if image %}
+        <img class="graphic graphic-image" id="graphic" src="{{ image }}" alt="" />
+        {% elif icon %}
+        {# Always an <img>, never inlined: as an image the caller's SVG runs no script and loads nothing. #}
+        <img class="graphic graphic-icon" id="graphic" src="{{ icon }}" alt="" />
+        <svg class="tint" data-color="{{ fields.icon_color }}" aria-hidden="true">
+          <filter id="tint" color-interpolation-filters="sRGB">
+            <feFlood class="tint-flood" />
+            <feComposite in2="SourceAlpha" operator="in" />
+          </filter>
+        </svg>
+        {% endif %}
+{% endblock %}
+
+{% block meta_end %}
+        {% if fields.pagination %}<span class="pagination">{{ fields.pagination }}</span>{% endif %}
+{% endblock %}

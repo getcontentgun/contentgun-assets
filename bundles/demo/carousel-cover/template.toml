@@ -1,0 +1,16 @@
+name = "carousel-cover"
+description = "First carousel slide: the topic in an amber label, the hook headline, a subline, the handle in the header row and an amber swipe button at the bottom right."
+formats = ["4:5", "1:1"]
+fields = ["headline", "topic", "subline", "handle"]
+required = ["headline"]
+
+[defaults]
+topic = ""
+subline = ""
+handle = ""
+
+[samples]
+headline = "Drei Gewohnheiten für bessere Beiträge."
+topic = "Arbeitsweise"
+subline = "Und wie du sie in deinen Alltag holst."
+handle = "@contentgun"

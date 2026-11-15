@@ -1,0 +1,23 @@
+:root {
+  --headline-box-height: 52%;
+  --headline-max: 96px;
+  --headline-min: 40px;
+
+  --cta-box-height: 24%;
+  --cta-max: 40px;
+  --cta-min: 24px;
+}
+
+:root[data-format="1:1"] {
+  --headline-box-height: 58%;
+  --cta-box-height: 28%;
+}
+
+.cta-box {
+  max-height: var(--cta-box-height);
+}
+
+.cta {
+  font-size: var(--cta-max);
+  text-wrap: balance;
+}

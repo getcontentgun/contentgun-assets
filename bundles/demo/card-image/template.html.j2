@@ -1,0 +1,20 @@
+{% extends "_base/base.html.j2" %}
+
+{% block backdrop %}
+      {% if image %}
+      <img class="backdrop" id="backdrop" src="{{ image }}" alt="" />
+      <div class="scrim"></div>
+      {% endif %}
+{% endblock %}
+
+{% block stage %}
+        <div class="bar"></div>
+        <div class="fit-box headline-box" id="headline-box">
+          <h1 class="headline" id="headline" data-fit="headline">{{ fields.headline | hyphenate }}</h1>
+        </div>
+        {% if fields.subline %}
+        <div class="fit-box subline-box" id="subline-box">
+          <p class="copy subline" id="subline" data-fit="subline">{{ fields.subline | hyphenate }}</p>
+        </div>
+        {% endif %}
+{% endblock %}

@@ -1,0 +1,177 @@
+#!/usr/bin/env bash
+#
+# Runs the project's checks and the test suite, one stage after another, and prints a
+# summary at the end.
+#
+# Usage: bin/test                        # linters, then pytest
+#        bin/test --lint                 # linters only
+#        bin/test --suite -k render      # pytest only, extra arguments go to pytest
+#        bin/test --bail                 # stop at the first failing stage
+
+# No -e on purpose: a failing stage must not abort the run before the summary is printed.
+set -uo pipefail
+
+readonly script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+readonly project_dir="$(dirname "${script_dir}")"
+readonly venv_dir="${project_dir}/.venv"
+readonly python="${venv_dir}/bin/python"
+
+green='' red='' yellow='' cyan='' reset=''
+if [[ -t 1 && -z "${NO_COLOR:-}" ]]; then
+    green=$'\033[0;32m' red=$'\033[0;31m' yellow=$'\033[0;33m'
+    cyan=$'\033[0;36m' reset=$'\033[0m'
+fi
+
+run_lint=0
+run_suite=0
+bail=0
+selected=0
+pytest_args=()
+
+usage() {
+    sed -n '3,9p' "${BASH_SOURCE[0]}" | cut -c 3-
+}
+
+for argument in "$@"; do
+    case "${argument}" in
+        --lint) run_lint=1; selected=1 ;;
+        --suite) run_suite=1; selected=1 ;;
+        --bail) bail=1 ;;
+        -h|--help) usage; exit 0 ;;
+        *) pytest_args+=("${argument}") ;;
+    esac
+done
+
+if [[ "${selected}" -eq 0 ]]; then
+    run_lint=1
+    run_suite=1
+fi
+if [[ "${#pytest_args[@]}" -eq 0 ]]; then
+    pytest_args=(-q)
+fi
+
+cd "${project_dir}"
+
+fail() {
+    echo "${1}" >&2
+    shift
+    for line in "$@"; do
+        echo "    ${line}" >&2
+    done
+    exit 1
+}
+
+warn() {
+    echo "  ${yellow}warning${reset}  $1" >&2
+}
+
+if [[ ! -x "${python}" ]]; then
+    fail "No virtualenv at ${venv_dir}." \
+        "python3 -m venv .venv" \
+        ".venv/bin/pip install -r requirements-dev.txt" \
+        ".venv/bin/python -m playwright install chromium"
+fi
+
+missing="$("${python}" - <<'PY'
+import importlib.util
+
+names = ("pytest", "httpx", "asgi_lifespan", "PIL", "ruff", "pyphen", "playwright", "mcp", "pypdf")
+print(" ".join(name for name in names if importlib.util.find_spec(name) is None))
+PY
+)"
+if [[ -n "${missing}" ]]; then
+    fail "Missing dependencies: ${missing}." \
+        ".venv/bin/pip install -r requirements-dev.txt"
+fi
+
+# The bundles of the repository, which tests/conftest.py points the suite at.
+if ! bundle_error="$("${python}" - <<'PY'
+import sys
+
+from app.config import ROOT_DIR
+from app.templating import TemplateRegistry
+
+try:
+    TemplateRegistry.load(ROOT_DIR / "bundles")
+except RuntimeError as error:
+    sys.exit(str(error))
+PY
+)"; then
+    fail "${bundle_error}"
+fi
+
+# Not fatal: the suite skips the browser tests instead of failing, which is easy to miss
+# in a run that reports nothing but passes.
+if ! "${python}" - <<'PY' >/dev/null 2>&1
+import os
+import sys
+
+from playwright.sync_api import sync_playwright
+
+with sync_playwright() as playwright:
+    sys.exit(0 if os.path.exists(playwright.chromium.executable_path) else 1)
+PY
+then
+    warn "Chromium is not installed, so the render tests will be skipped."
+    warn "Install it with: .venv/bin/python -m playwright install chromium"
+fi
+
+names=()
+states=()
+times=()
+failed=0
+
+stage() {
+    local name="$1"
+    shift
+
+    if [[ "${bail}" -eq 1 && "${failed}" -gt 0 ]]; then
+        names+=("${name}")
+        states+=("skip")
+        times+=("")
+        return
+    fi
+
+    echo
+    echo "${cyan}=== ${name} ===${reset}"
+    local start="${SECONDS}"
+    local state="pass"
+    "$@" || {
+        state="FAIL"
+        failed=$((failed + 1))
+    }
+
+    names+=("${name}")
+    states+=("${state}")
+    times+=("$(printf '%dm%02ds' $(((SECONDS - start) / 60)) $(((SECONDS - start) % 60)))")
+}
+
+readonly total_start="${SECONDS}"
+
+if [[ "${run_lint}" -eq 1 ]]; then
+    stage "ruff check" "${python}" -m ruff check .
+    stage "ruff format" "${python}" -m ruff format --check .
+fi
+
+if [[ "${run_suite}" -eq 1 ]]; then
+    stage "pytest" "${python}" -m pytest "${pytest_args[@]}"
+fi
+
+echo
+echo "${cyan}=== Summary ===${reset}"
+for index in "${!names[@]}"; do
+    case "${states[${index}]}" in
+        pass) label="${green}pass${reset}" ;;
+        FAIL) label="${red}FAIL${reset}" ;;
+        *) label="${yellow}skip${reset}" ;;
+    esac
+    printf '  %-14s %s %s\n' "${names[${index}]}" "${label}" "${times[${index}]}"
+done
+printf '\n  total %dm%02ds\n' \
+    $(((SECONDS - total_start) / 60)) $(((SECONDS - total_start) % 60))
+
+if [[ "${failed}" -gt 0 ]]; then
+    echo "${red}${failed} stage(s) failed.${reset}"
+    exit 1
+fi
+echo "${green}All stages passed.${reset}"

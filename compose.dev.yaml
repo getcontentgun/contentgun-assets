@@ -1,0 +1,16 @@
+services:
+  assets:
+    build:
+      context: .
+      dockerfile: docker/assets.Dockerfile
+    image: contentgun-assets:dev
+    ports:
+      - "127.0.0.1:${PORT:-8010}:8010"
+    env_file: .env
+    environment:
+      # Here as well as in the image: env_file would otherwise pass on a host path from .env.
+      BUNDLES_DIR: /bundles
+    volumes:
+      - ./bundles:/bundles:ro
+    init: true
+    shm_size: 1gb

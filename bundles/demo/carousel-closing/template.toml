@@ -1,0 +1,16 @@
+name = "carousel-closing"
+description = "Last carousel slide: an amber bar, the resolution headline, the call-to-action question, and the header row with handle and pagination."
+formats = ["4:5", "1:1"]
+fields = ["headline", "cta", "pagination", "handle"]
+required = ["headline"]
+
+[defaults]
+cta = ""
+pagination = ""
+handle = ""
+
+[samples]
+headline = "Klein anfangen, regelmäßig liefern."
+cta = "Welche Gewohnheit probierst du als Erstes aus?"
+pagination = "5/5"
+handle = "@contentgun"
