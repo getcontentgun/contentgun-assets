@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 #
 # Starts the service for local testing, after checking every prerequisite the app would
-# otherwise fail on: the virtualenv, the dependencies, .env, the template bundles, Chromium
-# and a free port. Runs uvicorn in the foreground, so Ctrl-C stops it.
+# otherwise fail on: the virtualenv, the dependencies, .env, the keys, the tenants and their
+# bundles, Chromium and a free port. Runs uvicorn in the foreground, so Ctrl-C stops it.
 #
 # Usage: bin/development [extra uvicorn arguments]
 #        bin/development --check          # run the checks only
@@ -93,39 +93,45 @@ if [[ ! -f "${project_dir}/.env" ]]; then
         "openssl rand -hex 32    # put the result in API_KEYS"
 fi
 
-api_keys_line="$(grep -E '^[[:space:]]*API_KEYS[[:space:]]*=' "${project_dir}/.env" | tail -n 1 || true)"
-api_key_count="$(printf '%s' "${api_keys_line#*=}" | tr ',' '\n' | grep -c '[^[:space:]"]' || true)"
-if [[ "${api_key_count}" -eq 0 ]]; then
-    fail "API_KEYS in .env is empty, so every authenticated route would answer 500." \
-        "openssl rand -hex 32    # put the result in API_KEYS"
-fi
-
 debug_routes="off"
 if grep -Eqi '^[[:space:]]*DEBUG_ROUTES[[:space:]]*=[[:space:]]*"?(1|true|yes|on)' "${project_dir}/.env"; then
     debug_routes="on"
 fi
-report ".env" "${api_key_count} API key(s), debug routes ${debug_routes}"
+report ".env" "debug routes ${debug_routes}"
 
-if ! bundle_state="$("${python}" - <<'PY'
+# Five lines: keys, tenants, the source of the keys, and the folders of BUNDLES_DIR and
+# TENANTS_FILE, empty when unset.
+if ! tenant_state="$("${python}" - <<'PY'
 import sys
 
 from app.config import settings
-from app.rendering import validate_defaults
-from app.templating import TemplateRegistry
+from app.tenants import load_configured_tenants
 
 try:
-    registry = TemplateRegistry.load(settings.bundles_dir)
-    validate_defaults(registry)
+    directory = load_configured_tenants()
 except RuntimeError as error:
     sys.exit(str(error))
-print(f"{len(registry.bundles)} bundle(s), {len(registry.ids)} templates")
-print(registry.root.resolve())
+if not directory.has_keys:
+    sys.exit(
+        "No API key is configured, so every authenticated route would answer 500.\n"
+        "    openssl rand -hex 32    # put the result in API_KEYS in .env\n"
+        "    or name a tenants file in TENANTS_FILE, see docs/tenants/README.md"
+    )
+internal = "on" if directory.internal_key else "off"
+print(f"{directory.key_count} API key(s), internal key {internal}")
+print(", ".join(f"{t.name} with {len(t.registry.ids)} templates" for t in directory.tenants))
+print("tenants_file" if settings.tenants_file else "api_keys")
+print(settings.bundles_dir.resolve() if settings.bundles_dir else "")
+print(settings.tenants_file.resolve().parent if settings.tenants_file else "")
 PY
 )"; then
     exit 1
 fi
-bundles_dir="$(tail -n 1 <<<"${bundle_state}")"
-report "bundles" "$(head -n 1 <<<"${bundle_state}") in ${bundles_dir}"
+key_source="$(sed -n '3p' <<<"${tenant_state}")"
+bundles_dir="$(sed -n '4p' <<<"${tenant_state}")"
+tenants_dir="$(sed -n '5p' <<<"${tenant_state}")"
+report "keys" "$(sed -n '1p' <<<"${tenant_state}")"
+report "tenants" "$(sed -n '2p' <<<"${tenant_state}")"
 
 if ! chromium_state="$("${python}" - <<'PY'
 import sys
@@ -167,7 +173,11 @@ if [[ "${debug_routes}" == "on" ]]; then
     report "preview" "http://${host}:${port}/v1/debug/html"
     report "openapi" "http://${host}:${port}/docs"
 fi
-report "sample" 'API_KEY="$(sed -n "s/^API_KEYS=//p" .env | cut -d, -f1)" bash scripts/render_sample.sh'
+if [[ "${key_source}" == "api_keys" ]]; then
+    report "sample" 'API_KEY="$(sed -n "s/^API_KEYS=//p" .env | cut -d, -f1)" bash scripts/render_sample.sh'
+else
+    report "sample" "API_KEY=<a key of a tenant> bash scripts/render_sample.sh"
+fi
 report "tests" ".venv/bin/python -m pytest -q"
 echo
 
@@ -177,12 +187,18 @@ fi
 
 uvicorn_args=(--host "${host}" --port "${port}")
 if [[ "${reload}" != "0" ]]; then
-    # template.css and the Jinja templates are re-read per request, but template.toml and
-    # bundle.toml are only read at startup. Naming a reload directory replaces the default,
-    # so a bundle directory outside the project needs the project named next to it.
+    # template.css and the Jinja templates are re-read per request, but the tenants file,
+    # template.toml and bundle.toml are only read at startup. Naming a reload directory
+    # replaces the default, so a folder outside the project needs the project named next to it.
     uvicorn_args+=(--reload --reload-include "*.toml")
-    if [[ "${bundles_dir}" != "${project_dir}"/* ]]; then
-        uvicorn_args+=(--reload-dir "${project_dir}" --reload-dir "${bundles_dir}")
+    outside=()
+    for dir in "${bundles_dir}" "${tenants_dir}"; do
+        if [[ -n "${dir}" && "${dir}" != "${project_dir}" && "${dir}" != "${project_dir}"/* ]]; then
+            outside+=(--reload-dir "${dir}")
+        fi
+    done
+    if [[ "${#outside[@]}" -gt 0 ]]; then
+        uvicorn_args+=(--reload-dir "${project_dir}" "${outside[@]}")
     fi
 fi
 

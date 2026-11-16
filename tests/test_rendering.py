@@ -12,7 +12,7 @@ from app.rendering import (
 from app.templating import TemplateRegistry
 from tests.conftest import (
     AUTH,
-    BUNDLES_DIR,
+    BUILTIN_DIR,
     CARD,
     CARD_IMAGE,
     CAROUSEL,
@@ -26,11 +26,18 @@ from tests.conftest import (
 
 @pytest.fixture(scope="module")
 def registry():
-    return TemplateRegistry.load(BUNDLES_DIR)
+    return TemplateRegistry.load(BUILTIN_DIR, default_template=CARD)
 
 
-def test_the_default_template_comes_from_the_settings(registry):
+def test_the_default_template_comes_from_the_registry(registry):
     assert resolve_template(registry, None).id == CARD
+
+
+def test_a_registry_without_a_default_asks_for_a_template():
+    with pytest.raises(ApiError) as excinfo:
+        resolve_template(TemplateRegistry.load(BUILTIN_DIR), None)
+    assert excinfo.value.status_code == 400
+    assert excinfo.value.message.startswith(f"Name a template. Available: {CARD}, ")
 
 
 def test_unknown_template_raises_400(registry):

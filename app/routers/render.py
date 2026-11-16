@@ -1,8 +1,8 @@
 import logging
 
-from fastapi import APIRouter, Depends, Request, Response
+from fastapi import APIRouter, Request, Response
 
-from app.auth import verify_api_key
+from app.auth import CurrentTenant
 from app.errors import ApiError
 from app.formats import filename_token
 from app.images import data_uri_size
@@ -12,7 +12,7 @@ from app.schemas import RenderRequest
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/v1", tags=["render"], dependencies=[Depends(verify_api_key)])
+router = APIRouter(prefix="/v1", tags=["render"])
 
 
 @router.post(
@@ -20,8 +20,8 @@ router = APIRouter(prefix="/v1", tags=["render"], dependencies=[Depends(verify_a
     response_class=Response,
     responses={200: {"content": {"image/png": {}}, "description": "Rendered card"}},
 )
-async def render(request: Request, payload: RenderRequest) -> Response:
-    registry = request.app.state.templates
+async def render(request: Request, payload: RenderRequest, tenant: CurrentTenant) -> Response:
+    registry = tenant.registry
     pool = request.app.state.browser
 
     card = resolve_render(registry, payload)
@@ -36,7 +36,8 @@ async def render(request: Request, payload: RenderRequest) -> Response:
     )
 
     logger.info(
-        "Rendering template=%s format=%s headline_length=%d image_bytes=%d icon_bytes=%d",
+        "Rendering tenant=%s template=%s format=%s headline_length=%d image_bytes=%d icon_bytes=%d",
+        tenant.name,
         card.spec.id,
         card.format.value,
         len(card.fields.get("headline", "")),

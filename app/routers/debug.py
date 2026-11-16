@@ -9,6 +9,7 @@ from fastapi.responses import HTMLResponse, Response
 from jinja2 import Environment
 from pydantic import ValidationError
 
+from app.errors import ApiError
 from app.formats import Format
 from app.rendering import (
     reject_image_and_icon,
@@ -19,10 +20,11 @@ from app.rendering import (
 )
 from app.schemas import RESERVED_KEYS, RenderRequest
 from app.templating import TemplateSpec
+from app.tenants import Tenant, TenantDirectory
 
 router = APIRouter(prefix="/v1/debug", tags=["debug"], include_in_schema=False)
 
-ROUTE_PARAMETERS = frozenset({"template", "format", "image_url", "icon_url", "fit"})
+ROUTE_PARAMETERS = frozenset({"tenant", "template", "format", "image_url", "icon_url", "fit"})
 NO_STORE = {"Cache-Control": "no-store"}
 
 SAMPLE_IMAGE_SIZE = (1200, 675)
@@ -56,7 +58,17 @@ INDEX = Environment(autoescape=True, trim_blocks=True, lstrip_blocks=True).from_
     </style>
   </head>
   <body>
-    <h1>Templates</h1>
+    {% if tenants %}
+    <h1>Tenants</h1>
+    <p>Every tenant sees the built-in bundles and the bundles of its own folder. Pick one to list
+    its templates.</p>
+    <ul>
+      {% for item in tenants %}
+      <li><a href="{{ item.href }}">{{ item.name }}</a></li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <h1>Templates{% if tenant %} of tenant {{ tenant }}{% endif %}</h1>
     <p>Every link opens the debug route with the template's sample content. The image and icon
     variants use <a href="{{ samples.image_url }}">a sample image</a> and
     <a href="{{ samples.icon_url }}">a sample icon</a>.</p>
@@ -79,6 +91,7 @@ INDEX = Environment(autoescape=True, trim_blocks=True, lstrip_blocks=True).from_
     </table>
     {% endfor %}
     {% endfor %}
+    {% endif %}
   </body>
 </html>
 """
@@ -100,28 +113,58 @@ def _variants(spec: TemplateSpec, samples: dict[str, str]) -> list[tuple[str, di
     return variants
 
 
-def _href(page: str, spec: TemplateSpec, fmt: Format, parameters: dict[str, str]) -> str:
-    query = {"template": spec.id, "format": fmt.value} | parameters
+def _href(
+    page: str, spec: TemplateSpec, fmt: Format, parameters: dict[str, str], tenant: str | None
+) -> str:
+    scope = {"tenant": tenant} if tenant else {}
+    query = scope | {"template": spec.id, "format": fmt.value} | parameters
     return f"{page}?{urlencode(query, safe=':/')}"
 
 
+def _tenant(directory: TenantDirectory, name: str | None) -> Tenant:
+    wanted = (name or "").strip()
+    if not wanted:
+        if directory.sole is None:
+            raise ApiError(
+                400,
+                f"Name a tenant with the parameter tenant. Tenants: {', '.join(directory.names)}.",
+            )
+        return directory.sole
+    tenant = directory.find(wanted)
+    if tenant is None:
+        raise ApiError(400, f"Unknown tenant {wanted!r}. Tenants: {', '.join(directory.names)}.")
+    return tenant
+
+
 @router.get("", response_class=HTMLResponse)
-async def debug_index(request: Request) -> HTMLResponse:
-    registry = request.app.state.templates
-    page = request.app.url_path_for("debug_html")
+async def debug_index(request: Request, tenant: str | None = None) -> HTMLResponse:
+    directory: TenantDirectory = request.app.state.tenants
     samples = {
         "image_url": request.app.url_path_for("sample_image"),
         "icon_url": request.app.url_path_for("sample_icon"),
     }
+    if not (tenant or "").strip() and directory.sole is None:
+        index = request.app.url_path_for("debug_index")
+        tenants = [
+            {"name": name, "href": f"{index}?{urlencode({'tenant': name})}"}
+            for name in directory.names
+        ]
+        return HTMLResponse(
+            INDEX.render(tenants=tenants, bundles=[], samples=samples), headers=NO_STORE
+        )
+
+    scope = _tenant(directory, tenant)
+    named = None if directory.sole is not None else scope.name
+    page = request.app.url_path_for("debug_html")
     bundles = []
-    for bundle in registry.bundles:
+    for bundle in scope.registry.bundles:
         templates = []
         for spec in bundle.specs.values():
             variants = [
                 {
                     "label": label,
                     "links": [
-                        {"format": fmt.value, "href": _href(page, spec, fmt, parameters)}
+                        {"format": fmt.value, "href": _href(page, spec, fmt, parameters, named)}
                         for fmt in spec.formats
                     ],
                 }
@@ -138,7 +181,10 @@ async def debug_index(request: Request) -> HTMLResponse:
         bundles.append(
             {"name": bundle.name, "description": bundle.description, "templates": templates}
         )
-    return HTMLResponse(INDEX.render(bundles=bundles, samples=samples), headers=NO_STORE)
+    return HTMLResponse(
+        INDEX.render(tenants=[], tenant=named, bundles=bundles, samples=samples),
+        headers=NO_STORE,
+    )
 
 
 @router.get("/samples/icon.svg")
@@ -177,13 +223,14 @@ async def sample_image() -> Response:
 @router.get("/html", response_class=HTMLResponse)
 async def debug_html(
     request: Request,
+    tenant: str | None = None,
     template: str | None = None,
     format: Format | None = None,
     image_url: str | None = None,
     icon_url: str | None = None,
     fit: int = 1,
 ) -> HTMLResponse:
-    registry = request.app.state.templates
+    registry = _tenant(request.app.state.tenants, tenant).registry
 
     spec = resolve_template(registry, template)
     fmt = resolve_format(spec, format)

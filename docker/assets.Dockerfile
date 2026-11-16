@@ -5,8 +5,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
-    PIP_ROOT_USER_ACTION=ignore \
-    BUNDLES_DIR=/bundles
+    PIP_ROOT_USER_ACTION=ignore
 
 WORKDIR /app
 
@@ -14,6 +13,7 @@ COPY requirements.txt .
 RUN python -m pip install -r requirements.txt
 
 COPY app/ app/
+COPY bundles/ bundles/
 
 USER pwuser
 

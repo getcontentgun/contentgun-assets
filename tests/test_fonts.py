@@ -4,14 +4,14 @@ import pytest
 
 from app.fonts import LATIN, LATIN_EXT, MIN_FONT_BYTES, WOFF2_SIGNATURE, load_font_set
 from app.templating import TemplateRegistry
-from tests.conftest import BUNDLE, BUNDLES_DIR, source_face
+from tests.conftest import BUILTIN_DIR, BUNDLE, source_face
 
 
 @pytest.fixture
 def fonts_dir(tmp_path):
     directory = tmp_path / "mini" / "fonts"
     directory.mkdir(parents=True)
-    source = BUNDLES_DIR / BUNDLE / "fonts" / source_face()["file"]
+    source = BUILTIN_DIR / BUNDLE / "fonts" / source_face()["file"]
     shutil.copyfile(source, directory / "face.woff2")
     return directory
 
@@ -36,11 +36,11 @@ def refusal(fonts_dir, **kwargs) -> str:
 
 
 def test_the_suite_bundle_embeds_every_face_once():
-    fonts = TemplateRegistry.load(BUNDLES_DIR).bundle(BUNDLE).fonts
+    fonts = TemplateRegistry.load(BUILTIN_DIR).bundle(BUNDLE).fonts
     assert fonts.css.count("@font-face") == len(fonts.faces)
     assert fonts.css.count('format("woff2")') == len(fonts.faces)
     for declared in fonts.faces:
-        data = (BUNDLES_DIR / BUNDLE / "fonts" / declared.file).read_bytes()
+        data = (BUILTIN_DIR / BUNDLE / "fonts" / declared.file).read_bytes()
         assert len(data) >= MIN_FONT_BYTES
         assert data.startswith(WOFF2_SIGNATURE)
 

@@ -22,10 +22,12 @@ bin/test --suite -k render                        # pytest only
 .venv/bin/pytest -q
 .venv/bin/ruff check . && .venv/bin/ruff format --check .
 docker compose -f compose.dev.yaml up --build     # the service in a container
+python3 scripts/new_api_key.py                    # a key and its hash for the tenants file
 ```
 
-Startup prerequisites: `.env` exists with a non-empty `API_KEYS`, the bundles in `BUNDLES_DIR`
-(`bundles/` by default) are valid, and Playwright's Chromium is installed. A broken bundle fails at
+Startup prerequisites: `.env` exists with a key in `API_KEYS` or a tenants file in `TENANTS_FILE`,
+the tenants and their bundles are valid (the built-in ones in `bundles/`, those of the tenants in
+`BUNDLES_DIR`), and Playwright's Chromium is installed. A broken bundle or tenants file fails at
 import time with a message naming the file; a missing Chromium fails when the lifespan starts.
 
 ## Architecture
@@ -33,25 +35,28 @@ import time with a message naming the file; a missing Chromium fails when the li
 | File | Role |
 |------|------|
 | `app/main.py` | App factory, lifespan (browser start/stop), middleware, router wiring |
-| `app/config.py` | `Settings` from `.env`, the bundle directory among them |
-| `app/auth.py` | Bearer dependency, constant-time comparison against every configured key |
+| `app/config.py` | `Settings` from `.env`, and the folder of the built-in bundles |
+| `app/tenants.py` | Tenants from `API_KEYS` or the tenants file, their key hashes and their registries, every startup check of them, and the constant-time key lookup. See `docs/tenants/README.md` |
+| `app/auth.py` | Bearer dependency that turns a key into its tenant, and the internal key with `X-Contentgun-Tenant` |
 | `app/errors.py` | `ApiError` and the handlers that turn everything into the JSON envelope |
 | `app/request_id.py` | Per-request UUID: log context and `X-Request-Id` header |
 | `app/formats.py` | Format enum and pixel dimensions |
 | `app/fonts.py` | The font faces and checks of a bundle, validated from its `bundle.toml`, and their `@font-face` CSS with base64 data URIs |
 | `app/hyphenation.py` | German break points as soft hyphens, plus the last-resort chopping |
 | `app/images.py` | Images and icons: base64 decoding, format sniffing, SVG validation, size limits, data URIs, and the expat check at startup |
-| `app/templating.py` | Bundle and template discovery and validation, one Jinja environment per bundle, `render_html()` |
+| `app/templating.py` | Bundle and template discovery and validation, one Jinja environment per bundle, the registry of one caller, `render_html()` |
 | `app/rendering.py` | Resolves template, format, fields and image from a request, and turns render failures into API errors |
 | `app/browser.py` | Chromium lifecycle, concurrency semaphore, screenshot and PDF print, font verification |
 | `app/document.py` | Joins the one-page PDFs of `POST /v1/document` into one file with pypdf |
 | `app/routers/` | One module per endpoint group |
-| `bundles/<bundle>/` | A template bundle: `bundle.toml`, `fonts/`, `assets/` and one folder per template with `template.toml` + `template.html.j2` + `template.css`. Format in `docs/bundles/README.md` |
+| `bundles/<bundle>/` | A built-in template bundle, which every tenant can use: `bundle.toml`, `fonts/`, `assets/` and one folder per template with `template.toml` + `template.html.j2` + `template.css`. Format in `docs/bundles/README.md` |
+| `scripts/new_api_key.py` | Creates a key and the hash for the tenants file, or hashes an existing key. Standard library only |
+| `tenants.example.toml` | The form of a tenants file, with placeholder hashes that stop the start |
 | `bundles/demo/_base/` | Shared skeleton and CSS of every template of the demo bundle. Not a template: the registry skips it because of the leading underscore |
 | `mcp/` | Local stdio MCP server for the Claude desktop app, a client of the HTTP API. A plain folder, not a package; never deployed. See `docs/mcp/README.md` |
 | `bin/test` | Linters and the test suite as stages, with a summary and `--lint`/`--suite`/`--bail` |
-| `docker/assets.Dockerfile` | The image of the service, on Microsoft's Playwright image, without bundles. See `docs/docker.md` |
-| `compose.dev.yaml` | Runs the image locally with `./bundles` mounted read-only and the configuration from `.env` |
+| `docker/assets.Dockerfile` | The image of the service, on Microsoft's Playwright image, with the built-in bundles and no bundle of a tenant. See `docs/docker.md` |
+| `compose.dev.yaml` | Runs the image locally with `./bundles` mounted over the built-in bundles and the configuration from `.env` |
 
 `app/rendering.py` is shared by the render, document and debug routes on purpose: the browser
 screenshots and prints exactly the HTML the debug route serves, so the design preview cannot drift
@@ -59,11 +64,11 @@ from the output.
 
 ## The demo bundle
 
-`bundles/demo/` is the only bundle in this repository: a neutral design in slate and amber with
-Space Grotesk headlines and Inter for every other text, whose design, font sources and measured
-limits are in `bundles/demo/README.md`. The suite tests it, and every template of it extends its
-`_base/`. Bundles of a brand or a customer live outside the repository, in a folder `BUNDLES_DIR`
-names.
+`bundles/demo/` is the only bundle in this repository, and so the only built-in one: a neutral
+design in slate and amber with Space Grotesk headlines and Inter for every other text, whose
+design, font sources and measured limits are in `bundles/demo/README.md`. The suite tests it, and
+every template of it extends its `_base/`. Bundles of a brand or a customer belong to a tenant and
+live outside the repository, in the tenant's folder under `BUNDLES_DIR`.
 
 The field is called `handle` rather than by position, so moving it in a template does not make the
 API lie. The handle is a plain request field: the service keeps no account directory and never
@@ -96,20 +101,27 @@ fills one in, so a card can only carry the identity its caller sent.
 - **A PDF page needs screen media and printed backgrounds.** `render_pdf` switches the page to screen media and prints with `print_background=True`; without them every card comes out on white. `page_ranges="1"` keeps a slide on one page. A document is one print per slide, joined by `app/document.py`, because every slide is an HTML document of its own with its own `:root` variables, so they cannot share one print.
 - **`--force-color-profile=srgb` is not optional on macOS.** Without it Chromium renders through the display profile and every color comes out shifted, the exact values the pixel tests check included.
 - **The Playwright pin and the browser revision belong together.** `playwright==1.62.0` in `requirements.txt` decides which Chromium `playwright install` fetches, and `docker/assets.Dockerfile` builds on `mcr.microsoft.com/playwright/python:v1.62.0-noble`, whose browsers belong to the same version. Bump both together; `tests/test_docker.py` fails when they drift apart.
-- **`.dockerignore` is a list of what the build may see.** Everything else is excluded, `.env` and the bundles included, so a file the Dockerfile is meant to copy has to be added there as well.
-- **Compose sets `BUNDLES_DIR` although the image does.** `env_file: .env` passes every variable of `.env` into the container, so a `BUNDLES_DIR` there, a folder of the host, would replace `/bundles`; `environment:` wins over `env_file:`. The image holds no bundles at all: without the volume the container stops at startup.
+- **`.dockerignore` is a list of what the build may see.** Everything else is excluded, `.env` and a tenants file included, so a file the Dockerfile is meant to copy, as it copies `bundles/`, has to be added there as well.
+- **Compose blanks `BUNDLES_DIR` and `TENANTS_FILE`.** `env_file: .env` passes every variable of `.env` into the container, so a path of the host there would reach a container that has no such path; `environment:` wins over `env_file:`. Blank works because an empty path setting counts as unset, see below.
+- **An empty path setting counts as unset.** `Settings` turns a blank `BUNDLES_DIR` or `TENANTS_FILE` into `None` in a validator. Compose and `tests/conftest.py` rely on that to override a line in `.env`; pydantic-settings' `env_ignore_empty` would not do, because it skips the blank variable and falls back to the very line in `.env` it was meant to override.
 - **Relaunching Chromium happens outside the per-render timeout.** A cold start inside the render budget would bill the launch to whichever request triggered it and could return 504 for a perfectly good template.
 - **`template.css` is read on every request, the font CSS once at startup.** The CSS is a few kilobytes and the design loop depends on re-reading it; the base64 font blob is 250KB, never changes at runtime and is built by `load_font_set()` when the bundle loads. A changed font file needs a restart.
 - **`_base/base.css` goes through Jinja.** The skeleton pulls it in with `{% include %}`, so `{{`, `{%` and `{#` in it are template syntax and either break the render or vanish from the CSS. It also reaches the page through Jinja's template cache, kept fresh by `auto_reload=True`, not through the uncached read that `template.css` gets; turn `auto_reload` off and every edit to `base.css` or a `.j2` file needs a restart.
 - **A folder whose name starts with `_` or `.` is neither a bundle nor a template.** The registry skips it in the bundle root and inside a bundle, where it also skips `fonts/` and `assets/`; that is how `_base/` holds shared files without a `template.toml`. A template given such a name does not fail at startup: it is missing from `GET /v1/templates`, and every request for it is a `400` for an unknown template. Every other folder must follow the naming rule, `^[a-z0-9][a-z0-9-]*$`, or the start fails.
 - **Every bundle has a Jinja environment of its own, and its loader stays inside the bundle.** `{% extends "_base/base.html.j2" %}` therefore names the skeleton of the template's own bundle. Jinja refuses `..` in a template name, and `BundleLoader` refuses a file whose real path leaves the bundle, as through a symlink; `inline_svg()` and `fallback_image` apply the same check to the bundle's `assets/`. A skeleton two bundles share is copied into both: there is no include across bundles.
-- **Template ids are `<bundle>/<template>` everywhere.** The render, document and debug routes, `GET /v1/templates`, `/health` and `DEFAULT_TEMPLATE` speak only ids, and a bare template name is an unknown template. The PNG's file name joins the two with a hyphen, `demo-card_4x5_<id>.png`, because a `/` cannot be part of it.
-- **`TemplateRegistry.load()` takes the directory and has no default.** The app passes `settings.bundles_dir`, the tests pass their own, and two registries on two directories share nothing, so a later directory per tenant needs no change in the registry.
-- **The suite pins `BUNDLES_DIR` and `DEFAULT_TEMPLATE` in `tests/conftest.py`,** like `API_KEYS`, so a variable in the shell or in `.env` cannot change what it tests. The tests address templates through the id constants there, and build small bundles of their own with `write_bundle()`, which borrows a font file from the bundle under test.
+- **Template ids are `<bundle>/<template>` everywhere.** The render, document and debug routes, `GET /v1/templates`, `/health`, `DEFAULT_TEMPLATE` and the `default_template` of a tenant speak only ids, and a bare template name is an unknown template. The PNG's file name joins the two with a hyphen, `demo-card_4x5_<id>.png`, because a `/` cannot be part of it.
+- **Every tenant has a registry of its own, built from shared bundles.** `load_tenants()` loads the built-in bundles once and every tenant's folder once, and hands each tenant a `TemplateRegistry` of the bundles it may use, with its default template. The `Bundle` objects of the built-in bundles are the same in every registry, so changing one, as `test_undeclared_font_fails_loudly` does with its fonts, changes it for every tenant. `TemplateRegistry.load()` is the plain variant for one flat folder, which the tests and `bin/test` use.
+- **A template of another tenant is a `400` for an unknown template, never a `403`.** Each route works with the registry of its tenant only, so a foreign id is simply missing, and the "Available" list of the message names the caller's own templates. A `403` would confirm that the id exists elsewhere.
+- **`/health` lists the built-in templates only.** It needs no key, so it must not name a tenant or a template of one; `TenantDirectory.builtin_ids` is what it shows.
+- **`authenticate()` compares against every stored hash without stopping at a match.** The time a request takes must not tell which key, or which tenant, matched. Keys are stored as SHA-256 hashes only, which is enough for keys with 256 random bits; the `sha256:` prefix in the tenants file is what tells a hash from a pasted key, since a key from `openssl rand -hex 32` is 64 hex digits too, and the startup message for a bad entry leaves the entry out.
+- **The internal key needs `X-Contentgun-Tenant`; a key of a tenant ignores it.** Only `INTERNAL_KEY` may name the tenant per request. Were the header honoured for every key, any tenant could act as any other.
+- **A bundle of a tenant must not share a name with a built-in one, and every folder in `BUNDLES_DIR` must belong to a tenant.** Both stop the start: the first so that an id means the same template for everyone, the second because a bundle folder left right in `BUNDLES_DIR`, the layout before tenants, would otherwise silently disappear.
+- **The debug routes take the tenant as a query parameter.** They are unauthenticated, so no key names it. With one tenant it is optional and the links of the overview leave it out; with several, `/v1/debug` lists the tenants and `/v1/debug/html` requires it.
+- **The suite pins `API_KEYS`, `TENANTS_FILE`, `INTERNAL_KEY`, `BUNDLES_DIR` and `DEFAULT_TEMPLATE` in `tests/conftest.py`,** the paths and the internal key to blank, so a variable in the shell or in `.env` cannot change what it tests. The tests address templates through the id constants there, build small bundles of their own with `write_bundle()`, which borrows a font file from the bundle under test, and build apps with tenants of their own through `tenants_for()`; `tenant_app` holds three tenants with a bundle each, one of which leaves out `demo`.
 - **A SIGKILLed uvicorn leaves Chromium behind.** Clean up with `pkill -f chromium_headless_shell`.
 - **`mcp/` is a plain folder, not a package.** The desktop app runs the folder directly, which puts it on the import path, so its modules import each other flat (`from config import ...`). An `__init__.py` in it would make it a package named `mcp` that shadows the SDK of the same name; without one, Python prefers the installed SDK. Its module names must therefore not collide with `app`, `tests` or an installed package, and `pyproject.toml` keeps `mcp` third-party for ruff and puts the folder on pytest's path.
 - **stdout belongs to the MCP protocol.** Nothing in `mcp/` may print: a stray line corrupts the stream and the desktop app drops the server. `main()` logs to stderr, which the app collects in `~/Library/Logs/Claude/mcp-server-contentgun-assets.log`.
-- **`mcp/` must not import from `app`.** `app.config` reads this repository's `.env` and `app.main` loads the bundles at import time; the MCP server runs elsewhere and talks to the service over HTTP only.
+- **`mcp/` must not import from `app`.** `app.config` reads this repository's `.env` and `app.main` loads the tenants and their bundles at import time; the MCP server runs elsewhere and talks to the service over HTTP only.
 - **`render_carousel` needs a bundle,** from its `bundle` parameter or `ASSETS_BUNDLE`, and refuses before any request without one. It renders `<bundle>/carousel-cover`, `<bundle>/carousel-content` and `<bundle>/carousel-closing`, so a bundle offers carousels by having templates of these names. The tool descriptions name no template; hints for a single template belong into its `description`.
 - **`MCPServer.call_tool()` raises in-process.** A `ToolError` becomes an `is_error` result only over the protocol, so the server tests go through `mcp.Client`, not through `call_tool()` directly.
 - **The limits in the MCP tool descriptions mirror `app/schemas.py`.** The model never reads the docs, so `LIMITS` in `mcp/server.py` repeats every cap; `tests/test_mcp_server.py` fails when the two drift apart.
@@ -117,11 +129,11 @@ fills one in, so a card can only carry the identity its caller sent.
 
 ## Adding a template
 
-1. Create `bundles/<bundle>/<name>/` with `template.toml` (`name` must equal the directory name), `template.html.j2` and `template.css`. The name follows `^[a-z0-9][a-z0-9-]*$`; a leading `_` marks shared files such as `_base/`. A new bundle also needs a `bundle.toml` with its font faces and checks and its fonts in `fonts/`, see `docs/bundles/README.md`.
+1. Create `<bundle>/<name>/` with `template.toml` (`name` must equal the directory name), `template.html.j2` and `template.css`, in a built-in bundle under `bundles/` or in a bundle of a tenant under `<BUNDLES_DIR>/<tenant>/`. The name follows `^[a-z0-9][a-z0-9-]*$`; a leading `_` marks shared files such as `_base/`. A new bundle also needs a `bundle.toml` with its font faces and checks and its fonts in `fonts/`, see `docs/bundles/README.md`.
 2. Declare `formats`, `fields`, `required`, `[defaults]` and `[samples]`. The registry validates that `required`, `defaults` and `samples` only mention declared fields. `[samples]` is the preview content of the debug route and never exposed by the API; it must give every required field a non-blank value, or the registry refuses to start. A default does not count, because the debug route validates the samples through the request model, which demands a headline before any default applies. `image = true` additionally lets the template take the request's image; without it an `image` in the request is a `400`. `fallback_image = "<file>"` names an image file in the bundle's `assets/` that is used when the request sends none. `icon = true` lets the template take an SVG `icon` the same way; such a template may not declare a fallback image, or a card with an icon would carry the fallback image as well. `[limits]` caps declared fields below the service-wide limits, from 1 to 200, and the samples must respect them. The template gets the fonts of its bundle; there is no font setting per template.
 3. The template receives `width`, `height`, `format`, `format_token`, `fields`, `image`, `icon`, `css`, `font_css`, `font_checks` and `fit_text`. Colors live in the bundle's CSS. In `demo`, extend `_base/base.html.j2`, as every template there does: fill `{% block stage %}`, and where needed `{% block meta_end %}` for the right end of the header row, `{% block backdrop %}` for a full-bleed image and `{% block footer %}` for a row under the stage. Put every fitted element alone in a `.fit-box` wrapper whose `max-height` is the space it gets, mark the element `data-fit="<name>"` and define `--<name>-min` and `--<name>-max`. `template.css` comes after `base.css`, so it overrides the shared rules and the `--color-*` variables every color goes through, and `:root[data-format="1:1"]` scopes a value to one format. A skeleton of your own needs the same readiness gate, font loading and fit-text pass.
-4. `GET /v1/templates` picks it up at the next start, and `POST /v1/render` accepts its declared fields. No code change, but every field that is new to the API gets a row in the parameter table of `docs/render.md`, with the templates that declare it: every element on a card is a request parameter, whether or not `RenderRequest` types it.
-5. Look at it with the debug route, `/v1/debug/html?template=<bundle>/<name>`, or pick it from the overview at `/v1/debug`, which links every template in every format and variant. The debug route takes every declared field as a query parameter on top of its sample. It calls `TemplateRegistry.render_html`, the same function the screenshot uses.
+4. `GET /v1/templates` picks it up at the next start for every tenant that can use the bundle, and `POST /v1/render` accepts its declared fields. No code change, but every field that is new to the API gets a row in the parameter table of `docs/render.md`, with the templates that declare it: every element on a card is a request parameter, whether or not `RenderRequest` types it.
+5. Look at it with the debug route, `/v1/debug/html?template=<bundle>/<name>`, with `&tenant=<tenant>` when there are several, or pick it from the overview at `/v1/debug`, which links every template in every format and variant. The debug route takes every declared field as a query parameter on top of its sample. It calls `TemplateRegistry.render_html`, the same function the screenshot uses.
 
 Logos go into the bundle's `assets/`; `inline_svg("file.svg")` is available as a Jinja global
 and inlines the SVG from there, so it stays crisp and can inherit `currentColor`.
@@ -133,7 +145,7 @@ and inlines the SVG from there, so it stays crisp and can inherit `currentColor`
 - Versioned paths `/v1/<resource>`. `/health` stays unversioned.
 - Bearer only. A key in a query parameter is never accepted.
 - Dependencies are pinned with `==` in `requirements.txt`; dev-only tools live in `requirements-dev.txt`, the MCP server's in `requirements-mcp.txt`, which `requirements-dev.txt` includes.
-- Never log the rendered text or the key. Template name, format and headline length are fine.
+- Never log the rendered text, a key or a key hash. Tenant name, template, format and headline length are fine.
 - Changing an endpoint means updating the table in `docs/README.md` and the endpoint's own page.
 - A feature beyond the HTTP API gets a folder of its own under `docs/`, such as `docs/mcp/`: its implementation plan while it is being built, its documentation as `README.md` once it exists. The API reference stays in `docs/` itself, one page per endpoint.
 - Commits follow Conventional Commits (`feat:`, `fix:`, `chore:`).

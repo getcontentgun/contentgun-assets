@@ -17,5 +17,5 @@ async def health(request: Request) -> HealthResponse:
     return HealthResponse(
         version=__version__,
         browser="ready",
-        templates=request.app.state.templates.ids,
+        templates=request.app.state.tenants.builtin_ids,
     )

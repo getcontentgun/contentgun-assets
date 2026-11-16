@@ -4,6 +4,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 DOCKERFILE = (ROOT / "docker" / "assets.Dockerfile").read_text(encoding="utf-8")
 COMPOSE = (ROOT / "compose.dev.yaml").read_text(encoding="utf-8")
+DOCKERIGNORE = (ROOT / ".dockerignore").read_text(encoding="utf-8")
 
 
 def test_the_base_image_matches_the_playwright_pin():
@@ -17,10 +18,20 @@ def test_the_base_image_matches_the_playwright_pin():
     assert image.group(1) == pin.group(1)
 
 
-def test_compose_mounts_the_bundles_where_the_image_reads_them():
-    assert re.search(r"^ENV .*BUNDLES_DIR=/bundles$", DOCKERFILE, re.M | re.S)
-    assert re.search(r"^\s+BUNDLES_DIR: /bundles$", COMPOSE, re.M)
-    assert re.search(r'^\s+- "?\./bundles:/bundles:ro"?$', COMPOSE, re.M)
+def test_the_image_carries_the_built_in_bundles():
+    assert re.search(r"^WORKDIR /app$", DOCKERFILE, re.M)
+    assert re.search(r"^COPY bundles/ bundles/$", DOCKERFILE, re.M)
+    assert re.search(r"^!bundles/$", DOCKERIGNORE, re.M)
+    assert "BUNDLES_DIR" not in DOCKERFILE
+
+
+def test_compose_mounts_the_built_in_bundles_over_the_copy_in_the_image():
+    assert re.search(r'^\s+- "?\./bundles:/app/bundles:ro"?$', COMPOSE, re.M)
+
+
+def test_compose_blanks_the_paths_that_env_file_would_pass_on():
+    for variable in ("BUNDLES_DIR", "TENANTS_FILE"):
+        assert re.search(rf'^\s+{variable}: ""$', COMPOSE, re.M), variable
 
 
 def test_compose_publishes_the_image_port_on_localhost_only():

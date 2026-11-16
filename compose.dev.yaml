@@ -8,9 +8,10 @@ services:
       - "127.0.0.1:${PORT:-8010}:8010"
     env_file: .env
     environment:
-      # Here as well as in the image: env_file would otherwise pass on a host path from .env.
-      BUNDLES_DIR: /bundles
+      # Blank, or env_file would pass on paths of the host from .env.
+      BUNDLES_DIR: ""
+      TENANTS_FILE: ""
     volumes:
-      - ./bundles:/bundles:ro
+      - ./bundles:/app/bundles:ro
     init: true
     shm_size: 1gb

@@ -1,31 +1,45 @@
-import hmac
+from typing import Annotated
 
-from fastapi import Header
+from fastapi import Depends, Header, Request
 
-from app.config import settings
 from app.errors import ApiError
+from app.tenants import Internal, Tenant, TenantDirectory
 
+TENANT_HEADER = "X-Contentgun-Tenant"
 UNAUTHORIZED_HEADERS = {"WWW-Authenticate": "Bearer"}
 
 
-async def verify_api_key(authorization: str | None = Header(default=None)) -> str:
-    keys = settings.api_key_list
-    if not keys:
-        raise ApiError(500, "API keys are not configured on the server.")
-
+def _bearer(authorization: str | None) -> str:
     if not authorization or not authorization.startswith("Bearer "):
         raise ApiError(401, "Unauthorized.", UNAUTHORIZED_HEADERS)
-
     presented = authorization[len("Bearer ") :].strip()
     if not presented:
         raise ApiError(401, "Unauthorized.", UNAUTHORIZED_HEADERS)
-
-    matched = False
-    for key in keys:
-        if hmac.compare_digest(presented.encode("utf-8"), key.encode("utf-8")):
-            matched = True
-
-    if not matched:
-        raise ApiError(401, "Unauthorized.", UNAUTHORIZED_HEADERS)
-
     return presented
+
+
+async def current_tenant(
+    request: Request,
+    authorization: str | None = Header(default=None),
+    tenant_header: str | None = Header(default=None, alias=TENANT_HEADER),
+) -> Tenant:
+    directory: TenantDirectory = request.app.state.tenants
+    if not directory.has_keys:
+        raise ApiError(500, "API keys are not configured on the server.")
+
+    match = directory.authenticate(_bearer(authorization))
+    if match is None:
+        raise ApiError(401, "Unauthorized.", UNAUTHORIZED_HEADERS)
+    if match is not Internal.ACCESS:
+        return match
+
+    name = (tenant_header or "").strip()
+    if not name:
+        raise ApiError(400, f"The internal key needs the header {TENANT_HEADER}.")
+    tenant = directory.find(name)
+    if tenant is None:
+        raise ApiError(400, f"The header {TENANT_HEADER} names no known tenant.")
+    return tenant
+
+
+CurrentTenant = Annotated[Tenant, Depends(current_tenant)]

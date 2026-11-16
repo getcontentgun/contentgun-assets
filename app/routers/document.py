@@ -1,8 +1,8 @@
 import logging
 
-from fastapi import APIRouter, Depends, Request, Response
+from fastapi import APIRouter, Request, Response
 
-from app.auth import verify_api_key
+from app.auth import CurrentTenant
 from app.config import settings
 from app.document import merge_pdfs
 from app.errors import ApiError
@@ -14,7 +14,7 @@ from app.schemas import DocumentRequest
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/v1", tags=["document"], dependencies=[Depends(verify_api_key)])
+router = APIRouter(prefix="/v1", tags=["document"])
 
 
 @router.post(
@@ -22,8 +22,8 @@ router = APIRouter(prefix="/v1", tags=["document"], dependencies=[Depends(verify
     response_class=Response,
     responses={200: {"content": {"application/pdf": {}}, "description": "One page per slide"}},
 )
-async def document(request: Request, payload: DocumentRequest) -> Response:
-    registry = request.app.state.templates
+async def document(request: Request, payload: DocumentRequest, tenant: CurrentTenant) -> Response:
+    registry = tenant.registry
     pool = request.app.state.browser
 
     # For the whole document and before any slide is decoded: every slide may stay under
@@ -54,7 +54,9 @@ async def document(request: Request, payload: DocumentRequest) -> Response:
         raise ApiError(503, "Renderer is not available.")
 
     logger.info(
-        "Rendering document format=%s slides=%d templates=%s image_bytes=%d icon_bytes=%d",
+        "Rendering document tenant=%s format=%s slides=%d templates=%s image_bytes=%d "
+        "icon_bytes=%d",
+        tenant.name,
         fmt.value,
         len(slides),
         ",".join(slide.spec.id for slide in slides),

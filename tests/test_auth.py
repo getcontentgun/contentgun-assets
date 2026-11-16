@@ -1,4 +1,7 @@
-from tests.conftest import AUTH
+import pytest
+
+from app.main import create_app
+from tests.conftest import AUTH, client_of, tenants_for
 
 
 async def test_missing_key_is_rejected(client):
@@ -33,11 +36,13 @@ async def test_second_configured_key_is_accepted(client):
     assert response.status_code == 200
 
 
-async def test_unconfigured_keys_return_500(client, monkeypatch):
-    from app.config import settings
-
-    monkeypatch.setattr(settings, "api_keys", "")
-    response = await client.get("/v1/templates", headers=AUTH)
+@pytest.mark.parametrize("path", ["/v1/templates", "/v1/render", "/v1/document"])
+async def test_without_any_key_every_authenticated_route_answers_500(path):
+    async with client_of(create_app(tenants_for(api_keys=()))) as client:
+        if path == "/v1/templates":
+            response = await client.get(path, headers=AUTH)
+        else:
+            response = await client.post(path, headers=AUTH, json={})
     assert response.status_code == 500
     assert response.json()["error"] == "API keys are not configured on the server."
 

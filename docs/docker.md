@@ -1,8 +1,9 @@
 # Running in a container
 
 `docker/assets.Dockerfile` builds the service on Microsoft's Playwright image, and
-`compose.dev.yaml` runs it locally with the bundles of this repository. The image holds the code
-and its Python dependencies, nothing else: no bundles, no `.env`, no tests.
+`compose.dev.yaml` runs it locally. The image holds the code, its Python dependencies and the
+built-in bundles in `bundles/`, nothing else: no bundles of a tenant, no `.env`, no tenants file,
+no tests.
 
 ## Local run
 
@@ -33,35 +34,61 @@ PORT=8011 docker compose -f compose.dev.yaml up
 |---|---|
 | Base | `mcr.microsoft.com/playwright/python:v1.62.0-noble`: Ubuntu 24.04, Python 3.12 and the browsers of Playwright 1.62.0 under `/ms-playwright` |
 | Code | `app/` and the packages of `requirements.txt` in `/app` |
+| Bundles | the built-in bundles in `/app/bundles`, where the service finds them on its own |
 | User | `pwuser`, which the base image creates; the service never runs as root |
 | Port | `8010`, uvicorn on `0.0.0.0` inside the container |
-| Bundles | `/bundles`, set as `BUNDLES_DIR`, from a volume |
 | Health | `HEALTHCHECK` calls `/health` every 30 seconds |
 
 `.dockerignore` lists what the build may see instead of what it may not: everything is excluded
-except `app/` and `requirements.txt`, so `.env`, the virtualenv, the bundles and the handover notes
-never reach the build context. A file the Dockerfile is meant to copy has to be added there too.
+except `app/`, `bundles/` and `requirements.txt`, so `.env`, a tenants file, the virtualenv and the
+handover notes never reach the build context. A file the Dockerfile is meant to copy has to be
+added there too.
 
 ## Configuration
 
 The variables are the ones in the [README](../README.md#configuration), passed as environment
-variables. Compose takes them from `.env` with `env_file` and sets `BUNDLES_DIR` to `/bundles` on
-top: a `BUNDLES_DIR` in `.env` names a folder of the host, which does not exist in the container,
-and `env_file` would otherwise hand it over. `DEFAULT_TEMPLATE` has to name a template of the
-mounted bundles, or the container stops at startup with a message listing the ones it found.
+variables. Compose takes them from `.env` with `env_file` and sets `BUNDLES_DIR` and `TENANTS_FILE`
+to empty on top: both name paths of the host, which do not exist in the container, and `env_file`
+would otherwise hand them over. A blank value counts as unset, so the container runs with the one
+tenant of `API_KEYS` and the built-in bundles. `DEFAULT_TEMPLATE` has to name a template the tenant
+can use, or the container stops at startup with a message listing the ones it found.
 
 ## Bundles
 
-Compose mounts `./bundles` read-only at `/bundles`. To render the bundles of another folder,
-change the left side of the volume. `template.css` and the `.j2` files are read again on every
-request, so an edit there shows on the next render; `bundle.toml`, `template.toml`, fonts and
-fallback images are read at startup and need a restart:
+The built-in bundles are part of the image. Compose mounts `./bundles` over them, read-only at
+`/app/bundles`, so an edit in the repository shows without a rebuild. `template.css` and the `.j2`
+files are read again on every request, so an edit there shows on the next render; `bundle.toml`,
+`template.toml`, fonts and fallback images are read at startup and need a restart:
 
 ```
 docker compose -f compose.dev.yaml restart
 ```
 
-Mount a folder, not the root of a file system: a `lost+found` folder there would count as a bundle
+## Tenants in the container
+
+With several tenants the container needs the tenants file and the folder of their bundles, mounted
+from the host, and `API_KEYS` empty, since the service refuses to start with both. A second compose
+file next to `compose.dev.yaml` does that without touching it, for example `compose.tenants.yaml`
+with the paths of your machine:
+
+```
+services:
+  assets:
+    environment:
+      API_KEYS: ""
+      TENANTS_FILE: /config/tenants.toml
+      BUNDLES_DIR: /tenants
+    volumes:
+      - /path/to/tenants.toml:/config/tenants.toml:ro
+      - /path/to/contentgun-templates/bundles:/tenants:ro
+```
+
+```
+docker compose -f compose.dev.yaml -f compose.tenants.yaml up
+```
+
+The keys then belong to the tenants, see [Tenants](tenants/README.md). Mount a folder as
+`BUNDLES_DIR`, not the root of a file system: a `lost+found` folder there would belong to no tenant
 and stop the start.
 
 ## Health
@@ -87,7 +114,7 @@ the Python 3.10 of Ubuntu 22.04 is below the floor of 3.11.
 
 ```
 docker build -f docker/assets.Dockerfile -t contentgun-assets .
-docker run --rm --init --shm-size=1g -p 127.0.0.1:8010:8010 --env-file .env -e BUNDLES_DIR=/bundles -v "$PWD/bundles:/bundles:ro" contentgun-assets
+docker run --rm --init --shm-size=1g -p 127.0.0.1:8010:8010 --env-file .env -e BUNDLES_DIR= -e TENANTS_FILE= contentgun-assets
 ```
 
 Anywhere the container is reachable from outside the host, keep `DEBUG_ROUTES` off: the debug

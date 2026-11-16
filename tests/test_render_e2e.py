@@ -8,6 +8,8 @@ from PIL import Image, ImageChops
 from pypdf import PdfReader
 
 from tests.conftest import (
+    ACME,
+    ACME_CARD,
     AUTH,
     BUNDLE,
     CARD,
@@ -16,9 +18,13 @@ from tests.conftest import (
     CONTENT,
     COVER,
     DISPLAY_FACE,
+    STUDIO,
+    STUDIO_CARD,
     TEXT_FACE,
     image_base64,
+    registry_of,
     svg_base64,
+    tenant_auth,
 )
 
 pytestmark = [pytest.mark.requires_chromium, pytest.mark.asyncio(loop_scope="module")]
@@ -221,7 +227,7 @@ async def test_card_image_without_an_image_uses_the_fallback(live_client):
 
 
 async def test_undeclared_font_fails_loudly(live_client, app, monkeypatch):
-    bundle = app.state.templates.bundle(BUNDLE)
+    bundle = registry_of(app).bundle(BUNDLE)
     monkeypatch.setattr(bundle, "fonts", replace(bundle.fonts, checks=('400 20px "NotAFont"',)))
     response = await render(live_client)
     assert response.status_code == 500
@@ -236,7 +242,7 @@ async def test_health_reports_ready(live_client, app):
     response = await live_client.get("/health")
     assert response.status_code == 200
     assert response.json()["browser"] == "ready"
-    assert response.json()["templates"] == app.state.templates.ids
+    assert response.json()["templates"] == app.state.tenants.builtin_ids
 
 
 @pytest.mark.parametrize("fmt", CAROUSEL_SIZES)
@@ -441,3 +447,27 @@ async def test_document_rasterises_the_icon_in_the_accent(live_client):
     pixels = images[0].image.convert("RGBA").get_flattened_data()
     colour, _ = Counter(pixel[:3] for pixel in pixels if pixel[3] == 255).most_common(1)[0]
     assert colour == pytest.approx(AMBER, abs=3)
+
+
+@pytest.mark.parametrize(("tenant", "template"), [(ACME, ACME_CARD), (STUDIO, STUDIO_CARD)])
+async def test_a_tenant_renders_its_own_and_a_built_in_template(
+    tenant_live_client, tenant, template
+):
+    for template_id in (template, CARD):
+        response = await tenant_live_client.post(
+            "/v1/render",
+            headers=tenant_auth(tenant),
+            json={"template": template_id, "headline": "Hallo"},
+        )
+        assert response.status_code == 200, f"{template_id}: {response.text}"
+        assert response.headers["content-type"] == "image/png"
+        assert image_of(response).size == (1080, 1350)
+
+
+async def test_health_lists_no_template_of_a_tenant(tenant_live_client, tenant_app):
+    response = await tenant_live_client.get("/health")
+    assert response.status_code == 200
+    templates = response.json()["templates"]
+    assert templates == tenant_app.state.tenants.builtin_ids
+    assert all(template_id.startswith(f"{BUNDLE}/") for template_id in templates)
+    assert not any(name in response.text for name in tenant_app.state.tenants.names)

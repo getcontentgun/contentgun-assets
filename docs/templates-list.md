@@ -1,7 +1,8 @@
 # GET /v1/templates
 
-Lists the loaded bundles and their templates, with the supported formats, fields and defaults.
-Use it to discover what `POST /v1/render` accepts.
+Lists the bundles and templates the calling tenant can use, with the supported formats, fields
+and defaults: its own bundles and the built-in ones, or the ones its bundle list names. Use it to
+discover what `POST /v1/render` accepts.
 
 ## Request
 
@@ -111,7 +112,8 @@ curl -s -H "Authorization: Bearer $API_KEY" http://127.0.0.1:8010/v1/templates
 
 ## Notes
 
-- Bundles and templates are discovered in `BUNDLES_DIR` at startup, see [Template bundles](bundles/README.md). A new template folder appears here without a code change, and `POST /v1/render` accepts its declared fields without one either. A folder whose name starts with `_`, such as `_base/`, holds shared files and is not listed.
+- The list depends on the key: every tenant gets its own, see [Tenants](tenants/README.md). The example above is what the one tenant of a fresh clone sees, the built-in bundle `demo`.
+- Bundles and templates are discovered at startup, the built-in ones in `bundles/` and those of the tenants in `BUNDLES_DIR`, see [Template bundles](bundles/README.md). A new template folder appears here without a code change, and `POST /v1/render` accepts its declared fields without one either. A folder whose name starts with `_`, such as `_base/`, holds shared files and is not listed.
 - `id` is what a request names in `template`: the bundle and the template name, joined by `/`. `bundles` lists every bundle with its description, sorted by name.
 - The templates are sorted by id. The first entry of a template's `formats` is the one the render uses when the request omits `format`.
 - `defaults` are the template's own fallbacks and apply whenever the request omits a field.

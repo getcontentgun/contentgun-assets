@@ -7,22 +7,25 @@ of its own; everything a card shows comes from the bundle of its template.
 ## Layout
 
 ```
-bundles/
-  <bundle>/
-    bundle.toml          name, description, font faces and font checks
-    fonts/               woff2 files and their license texts
-    assets/              logos, fallback images
-    _base/               optional: shared skeleton and CSS
-    <template>/
-      template.toml
-      template.html.j2
-      template.css
+<bundle>/
+  bundle.toml          name, description, font faces and font checks
+  fonts/               woff2 files and their license texts
+  assets/              logos, fallback images
+  _base/               optional: shared skeleton and CSS
+  <template>/
+    template.toml
+    template.html.j2
+    template.css
 ```
 
-The root is `BUNDLES_DIR`, `bundles/` in this repository by default; a relative value counts from
-the repository root. Every folder in the root is a bundle, unless its name starts with `_` or
-`.`. Inside a bundle, every folder is a template, except `fonts`, `assets` and folders whose name
-starts with `_` or `.`. Files next to them, such as a `README.md`, are ignored.
+Bundles live in two places, described in [Tenants](../tenants/README.md):
+
+- **Built-in bundles** in `bundles/` of this repository, `bundles/demo/` today. They ship with the service and the Docker image, and every tenant can use them.
+- **Bundles of a tenant** in its folder under `BUNDLES_DIR`, `<BUNDLES_DIR>/<tenant>/<bundle>/`. Only that tenant can use them.
+
+In either root every folder is a bundle, unless its name starts with `_` or `.`. Inside a bundle,
+every folder is a template, except `fonts`, `assets` and folders whose name starts with `_` or `.`.
+Files next to them, such as a `README.md`, are ignored.
 
 ## Names and ids
 
@@ -32,9 +35,13 @@ skipped above.
 
 A template is addressed as `<bundle>/<template>`, for example `demo/card`: in the
 `template` field of [`POST /v1/render`](../render.md) and [`POST /v1/document`](../document.md),
-in [`GET /v1/templates`](../templates-list.md), on the debug routes, in [`/health`](../health.md)
-and in `DEFAULT_TEMPLATE`. A name without its bundle is an unknown template. The file name of a
-rendered PNG joins the two with a hyphen: `demo-card_4x5_<id>.png`.
+in [`GET /v1/templates`](../templates-list.md), on the debug routes, in [`/health`](../health.md),
+in `DEFAULT_TEMPLATE` and in the `default_template` of a tenant. A name without its bundle is an
+unknown template, and so is the id of a template that belongs to another tenant. The file name of
+a rendered PNG joins the two with a hyphen: `demo-card_4x5_<id>.png`.
+
+A bundle of a tenant must not have the name of a built-in bundle, so an id means the same template
+for every tenant that can use it.
 
 ## bundle.toml
 
@@ -131,10 +138,9 @@ stops the start.
 
 ## Startup validation
 
-The service does not start while a bundle is broken. Every message begins with the file at fault
-and names the bundle or the template:
+The service does not start while a bundle is broken, a built-in one or one of any tenant. Every
+message begins with the file at fault and names the bundle or the template:
 
-- the root is missing or holds no bundle
 - a bundle or template name breaks the naming rule
 - `bundle.toml` is missing, is not valid TOML, has an unknown key, names another bundle or has a description that is not a string
 - a bundle has no font face, no check, a face with a missing or invalid key, or a check that no face covers
@@ -142,16 +148,17 @@ and names the bundle or the template:
 - a bundle has no template, or a template lacks `template.toml` or `template.html.j2`
 - a `template.toml` breaks one of its rules, see the table above
 - a fallback image is missing, outside the bundle's `assets/`, or not a PNG, JPEG or WebP file
-- `DEFAULT_TEMPLATE` names no template of the loaded bundles
 
-`bin/development` and `bin/test` load the bundles before anything else, so a broken bundle is
-reported before uvicorn or pytest starts.
+The checks of the tenants come on top, a tenant without a default template it can use among them;
+they are listed in [Tenants](../tenants/README.md#startup-validation). `bin/development` loads the
+tenants with all their bundles before uvicorn starts, and `bin/test` the built-in bundles before
+pytest, so a broken bundle is reported first.
 
 ## What is read when
 
 `bundle.toml`, every `template.toml`, the font files and the fallback images are read once, at
-startup. `template.css` is read on every request, and the `.j2` files go through Jinja's template
-cache, which reloads a changed file; a CSS or template edit therefore needs only a browser reload
-on the debug route, while a change to a `.toml` file, a font or a fallback image needs a restart.
-`bin/development` restarts on its own when a `.toml` file changes, also in a bundle directory
-outside the repository.
+startup, like the tenants file. `template.css` is read on every request, and the `.j2` files go
+through Jinja's template cache, which reloads a changed file; a CSS or template edit therefore
+needs only a browser reload on the debug route, while a change to a `.toml` file, a font or a
+fallback image needs a restart. `bin/development` restarts on its own when a `.toml` file changes,
+also in `BUNDLES_DIR` and in the folder of the tenants file when they lie outside the repository.

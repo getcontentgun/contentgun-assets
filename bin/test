@@ -84,15 +84,15 @@ if [[ -n "${missing}" ]]; then
         ".venv/bin/pip install -r requirements-dev.txt"
 fi
 
-# The bundles of the repository, which tests/conftest.py points the suite at.
+# The built-in bundles of the repository, which the suite tests.
 if ! bundle_error="$("${python}" - <<'PY'
 import sys
 
-from app.config import ROOT_DIR
+from app.config import BUILTIN_BUNDLES_DIR
 from app.templating import TemplateRegistry
 
 try:
-    TemplateRegistry.load(ROOT_DIR / "bundles")
+    TemplateRegistry.load(BUILTIN_BUNDLES_DIR)
 except RuntimeError as error:
     sys.exit(str(error))
 PY

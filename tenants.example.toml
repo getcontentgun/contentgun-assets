@@ -1,0 +1,19 @@
+# The tenants of the service, one table per tenant; TENANTS_FILE names this file, and API_KEYS must
+# be empty next to it. docs/tenants/README.md describes every key.
+#
+# The table name is the tenant's name and the name of its folder in BUNDLES_DIR, where its own
+# bundles lie: <BUNDLES_DIR>/<tenant>/<bundle>/. Every tenant also sees the built-in bundles, demo
+# among them, unless its bundles list leaves them out.
+#
+# api_keys holds hashes, never keys. Create a key and its hash with: python3 scripts/new_api_key.py
+# The entries below are placeholders and stop the start until they are replaced.
+
+[tenants.acme]
+api_keys = ["sha256:<replace with a hash from scripts/new_api_key.py>"]
+emails = ["team@acme.example"]
+
+[tenants.studio]
+api_keys = ["sha256:<replace with a hash from scripts/new_api_key.py>"]
+emails = ["hello@studio.example"]
+bundles = ["studio-cards"]
+default_template = "studio-cards/card"

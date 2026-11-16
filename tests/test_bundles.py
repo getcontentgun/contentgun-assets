@@ -5,13 +5,11 @@ from pathlib import Path
 import pytest
 from jinja2 import TemplateNotFound
 
-from app.config import settings
 from app.formats import Format
-from app.rendering import validate_defaults
-from app.templating import TemplateRegistry, UnknownTemplateError
+from app.templating import TemplateRegistry, UnknownTemplateError, load_bundles
 from tests.conftest import (
+    BUILTIN_DIR,
     BUNDLE,
-    BUNDLES_DIR,
     MINIMAL_TEMPLATE,
     image_base64,
     template_toml,
@@ -39,7 +37,7 @@ def write_png(path: Path) -> None:
 
 
 def test_the_bundle_of_the_suite_loads():
-    registry = TemplateRegistry.load(BUNDLES_DIR)
+    registry = TemplateRegistry.load(BUILTIN_DIR)
     assert BUNDLE in [bundle.name for bundle in registry.bundles]
     assert all(spec.id == f"{spec.bundle}/{spec.name}" for spec in registry.specs)
 
@@ -214,6 +212,19 @@ def test_a_directory_without_bundles_stops_the_start(tmp_path):
     assert refusal(tmp_path) == f"{tmp_path}: No bundles found."
 
 
+def test_loading_the_bundles_of_an_empty_directory_gives_none(tmp_path):
+    (tmp_path / "_shared").mkdir()
+    assert load_bundles(tmp_path) == {}
+
+
+def test_two_registries_can_share_a_bundle(tmp_path):
+    write_bundle(tmp_path)
+    bundles = load_bundles(tmp_path)
+    one, two = TemplateRegistry(bundles, "mini/plain"), TemplateRegistry(dict(bundles))
+    assert one.bundle("mini") is two.bundle("mini")
+    assert (one.default_template, two.default_template) == ("mini/plain", None)
+
+
 def test_a_bundle_without_templates_stops_the_start(tmp_path):
     bundle = write_bundle(tmp_path, templates={})
     (bundle / "assets").mkdir()
@@ -305,20 +316,10 @@ def test_a_bundle_linked_into_the_directory_is_loaded(tmp_path):
     assert TemplateRegistry.load(tmp_path / "root").ids == ["mini/plain"]
 
 
-def test_an_unknown_default_template_stops_the_start(tmp_path, monkeypatch):
-    write_bundle(tmp_path)
-    monkeypatch.setattr(settings, "default_template", "plain")
-    with pytest.raises(RuntimeError) as excinfo:
-        validate_defaults(TemplateRegistry.load(tmp_path))
-    assert str(excinfo.value) == (
-        "DEFAULT_TEMPLATE 'plain' is not a known template. Available: mini/plain."
-    )
-
-
 def test_the_suite_bundle_carries_everything_it_needs(tmp_path):
-    shutil.copytree(BUNDLES_DIR / BUNDLE, tmp_path / BUNDLE)
+    shutil.copytree(BUILTIN_DIR / BUNDLE, tmp_path / BUNDLE)
     registry = TemplateRegistry.load(tmp_path)
-    assert registry.ids == [spec.id for spec in TemplateRegistry.load(BUNDLES_DIR).specs]
+    assert registry.ids == [spec.id for spec in TemplateRegistry.load(BUILTIN_DIR).specs]
     for spec in registry.specs:
         fields = dict.fromkeys(spec.fields, "") | spec.defaults | spec.samples
         assert registry.render_html(spec, spec.formats[0], fields)

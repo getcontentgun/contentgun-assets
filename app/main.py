@@ -1,6 +1,5 @@
 import logging
 from contextlib import asynccontextmanager
-from pathlib import Path
 
 from fastapi import FastAPI
 
@@ -9,10 +8,9 @@ from app.browser import BrowserPool
 from app.config import settings
 from app.errors import register_exception_handlers
 from app.images import verify_xml_parser
-from app.rendering import validate_defaults
 from app.request_id import RequestIdMiddleware, configure_logging
 from app.routers import debug, document, health, render, templates
-from app.templating import TemplateRegistry
+from app.tenants import TenantDirectory, load_configured_tenants
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +29,12 @@ async def lifespan(app: FastAPI):
         raise
 
     app.state.browser = pool
-    logger.info("Service ready with templates: %s", ", ".join(app.state.templates.ids))
+    directory: TenantDirectory = app.state.tenants
+    logger.info(
+        "Service ready. Tenants: %s. Built-in templates: %s.",
+        ", ".join(directory.names),
+        ", ".join(directory.builtin_ids) or "none",
+    )
     try:
         yield
     finally:
@@ -39,7 +42,7 @@ async def lifespan(app: FastAPI):
         app.state.browser = None
 
 
-def create_app(bundles_dir: Path | None = None) -> FastAPI:
+def create_app(tenants: TenantDirectory | None = None) -> FastAPI:
     configure_logging()
     verify_xml_parser()
 
@@ -53,9 +56,8 @@ def create_app(bundles_dir: Path | None = None) -> FastAPI:
         redoc_url=None,
         openapi_url="/openapi.json" if settings.debug_routes else None,
     )
-    app.state.templates = TemplateRegistry.load(bundles_dir or settings.bundles_dir)
+    app.state.tenants = load_configured_tenants() if tenants is None else tenants
     app.state.browser = None
-    validate_defaults(app.state.templates)
 
     app.add_middleware(RequestIdMiddleware)
     register_exception_handlers(app)

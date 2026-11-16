@@ -28,7 +28,7 @@ The flip side: the server exists only while the Mac and the desktop app are runn
    bin/development
    ```
 
-3. Add the server to `~/Library/Application Support/Claude/claude_desktop_config.json`, merged into whatever `mcpServers` already holds. Locally, `ASSETS_API_KEY` is one of the keys from `API_KEYS` in this repository's `.env`:
+3. Add the server to `~/Library/Application Support/Claude/claude_desktop_config.json`, merged into whatever `mcpServers` already holds. `ASSETS_API_KEY` is a key of the tenant the server works for; locally that is one of the keys from `API_KEYS` in this repository's `.env`, the keys of the one tenant `default`:
 
    ```
    {
@@ -56,8 +56,10 @@ exposure as the development `.env`.
 
 **Against a deployed service**, set `ASSETS_BASE_URL` to its address, `https://api.contentgun.de`
 when the variable is not set, and give the server a key of its own, so it can be revoked without
-touching other callers: generate one with `openssl rand -hex 32`, append it to that service's
-`API_KEYS` and restart it.
+touching other callers. With a tenants file, create one with `python3 scripts/new_api_key.py`,
+add its hash to the `api_keys` of the tenant and restart the service, see
+[Tenants](../tenants/README.md#keys). The server sees what that tenant sees: its own bundles and
+the built-in ones. It never uses `INTERNAL_KEY`, which belongs to the remote MCP server to come.
 
 ## Tools
 
@@ -177,7 +179,7 @@ length, image and icon size and request id, never card text or the key.
 |---------|-------|
 | The server does not appear or shows as failed | The log names the cause: a configuration sentence, or `ModuleNotFoundError` when the dependencies are missing or `args` does not point at the `mcp` folder |
 | "Could not reach http://127.0.0.1:8010" | `bin/development` is not running |
-| "rejected ASSETS_API_KEY" | The key is not in `API_KEYS` of the service it talks to |
+| "rejected ASSETS_API_KEY" | The key belongs to no tenant of the service it talks to: it is neither in `API_KEYS` nor hashed in its tenants file |
 | Changes to the configuration have no effect | The desktop app was not restarted |
 
 ## Development

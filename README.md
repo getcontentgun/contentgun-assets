@@ -7,11 +7,15 @@ used before.
 
 Templates come in bundles: a bundle is a folder with the templates of one design and everything
 they need, fonts and images included, see [docs/bundles/README.md](docs/bundles/README.md). A
-template is addressed as `<bundle>/<template>`. The repository ships `bundles/demo/`, a neutral
-design in slate and amber: `card` and `card-image` for single cards, and `carousel-cover`,
-`carousel-content` and `carousel-closing` for the slides of a carousel. `GET /v1/templates` lists
-them with their formats and fields. Bundles of your own live in a folder of their own, which
-`BUNDLES_DIR` names.
+template is addressed as `<bundle>/<template>`. The repository ships the built-in bundle
+`bundles/demo/`, a neutral design in slate and amber: `card` and `card-image` for single cards,
+and `carousel-cover`, `carousel-content` and `carousel-closing` for the slides of a carousel.
+`GET /v1/templates` lists them with their formats and fields.
+
+Every request belongs to a tenant, the owner of its key. A tenant sees the built-in bundles and
+its own, which live outside the repository in its folder under `BUNDLES_DIR`. A fresh clone has
+one tenant, whose keys are `API_KEYS`; several tenants come from a tenants file, see
+[docs/tenants/README.md](docs/tenants/README.md).
 
 Nothing is stored: a request image or icon lives in the request only, the PNG or PDF in the
 response.
@@ -44,9 +48,9 @@ openssl rand -hex 32
 bin/development
 ```
 
-The script verifies what the service needs (virtualenv, dependencies, `.env` with a key, the
-fonts, Chromium, a free port) and then runs uvicorn in the foreground on `127.0.0.1:8010` with
-reload. `bin/development --check` stops after the checks, `HOST`, `PORT` and `RELOAD=0` override
+The script verifies what the service needs (virtualenv, dependencies, `.env`, a key, the tenants
+and their bundles, Chromium, a free port) and then runs uvicorn in the foreground on
+`127.0.0.1:8010` with reload. `bin/development --check` stops after the checks, `HOST`, `PORT` and `RELOAD=0` override
 the defaults, and any further arguments go to uvicorn.
 
 Without the script:
@@ -87,10 +91,10 @@ in [docs/render.md](docs/render.md#carousel).
 docker compose -f compose.dev.yaml up --build
 ```
 
-Builds the image from `docker/assets.Dockerfile` and runs it on `127.0.0.1:8010` with the bundles
-of this repository mounted read-only and the configuration from `.env`. Like `bin/development`, it
-takes another port of the host with `PORT`. Image, configuration and health check are described in
-[docs/docker.md](docs/docker.md).
+Builds the image from `docker/assets.Dockerfile`, which carries the built-in bundles, and runs it on
+`127.0.0.1:8010` with the configuration from `.env`. Like `bin/development`, it takes another port
+of the host with `PORT`. Image, configuration, tenants in the container and the health check are
+described in [docs/docker.md](docs/docker.md).
 
 ## Looking at a template
 
@@ -133,30 +137,33 @@ troubleshooting are in [docs/mcp/README.md](docs/mcp/README.md).
 ## Documentation
 
 [docs/README.md](docs/README.md) is the API reference: one page per endpoint, plus the
-authentication rules. [CLAUDE.md](CLAUDE.md) holds the architecture and the pitfalls of the
-rendering.
+authentication rules. [docs/tenants/README.md](docs/tenants/README.md) describes tenants, keys and
+the tenants file. [CLAUDE.md](CLAUDE.md) holds the architecture and the pitfalls of the rendering.
 
 ## Configuration
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `API_KEYS` | empty | Comma-separated bearer keys. Empty means every authenticated route answers `500` |
+| `API_KEYS` | empty | Comma-separated bearer keys of the one tenant `default`, in plain text. Without a key anywhere, every authenticated route answers `500` |
+| `TENANTS_FILE` | empty | A TOML file with several tenants, their key hashes and settings, see [docs/tenants/README.md](docs/tenants/README.md). Not together with `API_KEYS`. A relative path counts from the repository root |
+| `INTERNAL_KEY` | empty | The key of a service that acts for every tenant and names it in `X-Contentgun-Tenant`. At least 32 characters; empty switches it off |
 | `DEBUG_ROUTES` | `false` | Mounts the overview, debug route and sample files under `/v1/debug`, plus `/docs` and `/openapi.json`, all unauthenticated. Development only |
 | `STRICT_FONTS` | `true` | A font that fails to load becomes a `500` instead of a wrong-looking card |
 | `RENDER_CONCURRENCY` | `2` | Parallel browser pages |
 | `RENDER_TIMEOUT_MS` | `15000` | Per-render budget, then `504` |
 | `QUEUE_TIMEOUT_MS` | `10000` | Wait for a free slot, then `503` |
 | `MAX_IMAGE_BYTES` | `8388608` | Largest decoded image a request may carry, and the budget of all images and icons of a document together, then `413`. An icon is capped at 256 KB below that |
-| `BUNDLES_DIR` | `bundles/` in the repository | The folder whose subfolders are the template bundles. A relative path counts from the repository root |
-| `DEFAULT_TEMPLATE` | `demo/card` | The template id used when the request omits `template` |
+| `BUNDLES_DIR` | empty | The folder with one subfolder per tenant, holding the bundles of that tenant. Empty means the built-in bundles only. A relative path counts from the repository root |
+| `DEFAULT_TEMPLATE` | `demo/card` | The template id used when the request omits `template`, for every tenant without a `default_template` of its own |
 
 The handle on the card comes from the request. There is no server-side account list.
 
 ## Adding a template
 
-Create `bundles/<bundle>/<template>/` with `template.toml`, `template.html.j2` and
-`template.css`, or a new bundle next to `bundles/demo/` with a `bundle.toml` that declares its
-fonts. The registry picks it up at startup and `GET /v1/templates` lists it. A folder whose name
+Create `<bundle>/<template>/` with `template.toml`, `template.html.j2` and `template.css`, in a
+built-in bundle under `bundles/` or in a bundle of a tenant under `<BUNDLES_DIR>/<tenant>/`, or a
+new bundle with a `bundle.toml` that declares its fonts. The registry picks it up at startup and
+`GET /v1/templates` lists it for every tenant that can use it. A folder whose name
 starts with `_`, such as `_base/` with the shared skeleton of the carousel templates, is not a
 template and is skipped. [docs/bundles/README.md](docs/bundles/README.md) describes the format,
 [CLAUDE.md](CLAUDE.md) how a template is built.

@@ -15,8 +15,8 @@ from app.templating import (
     registered,
 )
 from tests.conftest import (
+    BUILTIN_DIR,
     BUNDLE,
-    BUNDLES_DIR,
     CARD,
     CARD_IMAGE,
     CAROUSEL,
@@ -41,7 +41,7 @@ SECONDARY = {COVER: "topic", CONTENT: "body", CLOSING: "cta"}
 
 @pytest.fixture(scope="module")
 def registry():
-    return TemplateRegistry.load(BUNDLES_DIR)
+    return TemplateRegistry.load(BUILTIN_DIR)
 
 
 def sample_html(registry, template_id: str, fmt: Format = Format.PORTRAIT_4_5, **fields) -> str:
@@ -108,7 +108,7 @@ def test_card_image_renders_the_backdrop_and_scrim(registry):
 
 def test_card_image_declares_its_fallback_from_the_bundle_assets(registry):
     spec = registry.get(CARD_IMAGE)
-    assert spec.fallback_image.parent == (BUNDLES_DIR / BUNDLE / "assets").resolve()
+    assert spec.fallback_image.parent == (BUILTIN_DIR / BUNDLE / "assets").resolve()
     assert spec.fallback_image.is_file()
     assert registry.get(CARD).fallback_image is None
 

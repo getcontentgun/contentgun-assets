@@ -15,7 +15,7 @@ from app.images import (
     file_data_uri,
 )
 from app.templating import TemplateRegistry
-from tests.conftest import BUNDLES_DIR, CARD_IMAGE, SQUARE_SVG, image_base64, svg_base64
+from tests.conftest import BUILTIN_DIR, CARD_IMAGE, SQUARE_SVG, image_base64, svg_base64
 
 
 def test_plain_base64_becomes_a_png_data_uri():
@@ -87,7 +87,7 @@ def test_data_uri_size_of_nothing_is_zero():
 
 
 def test_the_template_fallback_is_a_usable_image():
-    spec = TemplateRegistry.load(BUNDLES_DIR).get(CARD_IMAGE)
+    spec = TemplateRegistry.load(BUILTIN_DIR).get(CARD_IMAGE)
     assert spec.fallback_image is not None
     assert file_data_uri(spec.fallback_image).startswith("data:image/jpeg;base64,")
 

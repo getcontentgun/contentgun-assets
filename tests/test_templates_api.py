@@ -8,6 +8,7 @@ from tests.conftest import (
     CONTENT,
     COVER,
     SHOWCASE,
+    registry_of,
 )
 
 
@@ -27,7 +28,7 @@ async def test_every_template_names_its_bundle(client):
 
 async def test_the_bundles_are_listed_with_their_description(client, app):
     body = (await client.get("/v1/templates", headers=AUTH)).json()
-    description = app.state.templates.bundle(BUNDLE).description
+    description = registry_of(app).bundle(BUNDLE).description
     assert description
     assert body["bundles"] == [{"name": BUNDLE, "description": description}]
 

@@ -12,11 +12,12 @@ Base URL in development: `http://127.0.0.1:8010`
 | `GET` | [`/v1/debug/html`](debug-html.md) | no | Returns the template HTML for design work (development only) |
 | `GET` | [`/v1/debug/samples/…`](debug-index.md#sample-files) | no | The sample image and icon the overview's variants use (development only) |
 
-See [authentication.md](authentication.md) for the key handling. Templates come from template
-bundles, described in [bundles/README.md](bundles/README.md), and are addressed as
-`<bundle>/<template>`. Running the service in a container is described in
-[docker.md](docker.md). The local MCP server for the Claude desktop app, a client of this API, is
-documented in [mcp/README.md](mcp/README.md).
+See [authentication.md](authentication.md) for the key handling. Every key belongs to a tenant,
+and every request sees only the bundles of its tenant and the built-in ones, see
+[tenants/README.md](tenants/README.md). Templates come from template bundles, described in
+[bundles/README.md](bundles/README.md), and are addressed as `<bundle>/<template>`. Running the
+service in a container is described in [docker.md](docker.md). The local MCP server for the Claude
+desktop app, a client of this API, is documented in [mcp/README.md](mcp/README.md).
 
 All error responses use the same envelope:
 

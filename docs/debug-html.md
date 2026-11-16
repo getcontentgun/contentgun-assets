@@ -16,13 +16,14 @@ variant, so most of the time there is no URL to type.
 
 | Query parameter | Default | Description |
 |-----------------|---------|-------------|
-| `template`, `format` | as in render | `template` takes a template id, `<bundle>/<template>` |
+| `tenant` | the only tenant, when there is just one | Whose templates to preview. With several tenants it is required, see [Tenants](tenants/README.md) |
+| `template`, `format` | as in render, the tenant's default template included | `template` takes a template id, `<bundle>/<template>`, of a template the tenant can use |
 | `image_url` | the template's fallback image | Image for a template that accepts one, as a URL. Ignored by templates without the capability |
 | `icon_url` | none | SVG icon for a template that accepts one, as a URL, for example from jsDelivr. Ignored by templates without the capability. Together with `image_url` it is a `400`, as on the render route |
 | `fit` | `1` | `0` disables the fit-text script, so the CSS font sizes apply unchanged |
 | any field the template declares | the field's value in the `[samples]` table of the template's `template.toml`, else its default | The same limits as in the render request: `headline` 1 to 140 characters, `handle` and `topic` up to 60, `pagination` up to 16, every other field up to 200, and whatever tighter limits the template sets in `[limits]`. Empty removes an optional element |
 
-Every query parameter other than the five above is taken as a field. One the template does not
+Every query parameter other than the six above is taken as a field. One the template does not
 declare, such as a `subline` left over after switching to `demo/carousel-content`, is a `400`
 listing the accepted fields, exactly as on the render route.
 
@@ -31,7 +32,7 @@ listing the accepted fields, exactly as on the render route.
 | Status | Body | Description |
 |--------|------|-------------|
 | `200` | HTML | The exact markup the screenshot is taken from |
-| `400` | `{"ok": false, "error": "..."}` | Same length limits and field resolution as the render endpoint, including a field the template does not declare, and an `image_url` next to an `icon_url` |
+| `400` | `{"ok": false, "error": "..."}` | Same length limits and field resolution as the render endpoint, including a field the template does not declare, and an `image_url` next to an `icon_url`. Also a missing `tenant` while there are several, an unknown one, and a template the tenant cannot use |
 | `404` | `{"ok": false, "error": "Not found."}` | `DEBUG_ROUTES` is off |
 
 ## Example

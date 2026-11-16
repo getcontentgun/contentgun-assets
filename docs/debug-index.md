@@ -8,14 +8,22 @@ Only mounted when `DEBUG_ROUTES=true`, and not authenticated, like the debug rou
 
 ## Request
 
-**Method:** `GET`, no parameters. `/v1/debug/` redirects here.
+**Method:** `GET`. `/v1/debug/` redirects here.
+
+| Query parameter | Default | Description |
+|-----------------|---------|-------------|
+| `tenant` | the only tenant, when there is just one | Whose templates to list, see [Tenants](tenants/README.md) |
 
 ## What it lists
 
-Every bundle the registry loaded, with its description, and below it every template of the
-bundle, with its id, its description and a table: one row per variant, one column per format the
-template offers. The variants follow from what the
-template declares, so a new template shows up with the right ones without a code change:
+With several tenants and no `tenant` parameter, the page lists the tenants, each a link to its own
+overview. The debug routes need no key, so the tenant is a parameter here instead.
+
+The overview of a tenant shows every bundle it can use, with its description, and below it every
+template of the bundle, with its id, its description and a table: one row per variant, one column
+per format the template offers. With several tenants every link carries `tenant`; with one it
+does not need to. The variants follow from what the template declares, so a new template shows up
+with the right ones without a code change:
 
 | Variant | Offered for | Link |
 |---------|-------------|------|
@@ -41,11 +49,13 @@ without a network:
 
 | Status | Body | Description |
 |--------|------|-------------|
-| `200` | HTML | The overview, with `Cache-Control: no-store` |
+| `200` | HTML | The overview or the list of tenants, with `Cache-Control: no-store` |
+| `400` | `{"ok": false, "error": "Unknown tenant 'nobody'. Tenants: acme, studio."}` | `tenant` names no tenant |
 | `404` | `{"ok": false, "error": "Not found."}` | `DEBUG_ROUTES` is off |
 
 ## Example
 
 ```
 open http://127.0.0.1:8010/v1/debug
+open "http://127.0.0.1:8010/v1/debug?tenant=acme"
 ```

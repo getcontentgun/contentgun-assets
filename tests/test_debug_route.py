@@ -8,14 +8,14 @@ import pytest
 from PIL import Image
 
 from app.images import decode_icon, decode_image
-from tests.conftest import BUNDLE, CARD, CONTENT, SHOWCASE
+from tests.conftest import BUNDLE, CARD, CONTENT, SHOWCASE, registry_of
 
 
 async def test_debug_html_renders_without_auth(client, app):
     response = await client.get("/v1/debug/html")
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/html")
-    assert app.state.templates.get(CARD).samples["headline"] in response.text
+    assert registry_of(app).get(CARD).samples["headline"] in response.text
 
 
 async def test_debug_html_accepts_overrides(client):
@@ -33,7 +33,7 @@ async def test_debug_html_rejects_unsupported_format(client):
 
 
 async def test_every_template_previews_from_its_samples(client, app):
-    for template_id in app.state.templates.ids:
+    for template_id in registry_of(app).ids:
         response = await client.get("/v1/debug/html", params={"template": template_id})
         assert response.status_code == 200, f"{template_id}: {response.text}"
 
@@ -138,7 +138,7 @@ def templates_with(links: list[str], parameter: str) -> set[str]:
 
 async def test_debug_index_links_every_template_in_every_format(client, app):
     links = await index_links(client)
-    for spec in app.state.templates.specs:
+    for spec in registry_of(app).specs:
         for fmt in spec.formats:
             assert f"/v1/debug/html?template={spec.id}&format={fmt.value}" in links
 
@@ -165,7 +165,7 @@ async def test_debug_index_shows_a_template_with_its_required_fields_only(client
 async def test_debug_index_groups_the_templates_by_bundle(client, app):
     response = await client.get("/v1/debug")
     assert f"<h2>Bundle {BUNDLE}</h2>" in response.text
-    assert app.state.templates.bundle(BUNDLE).description in response.text
+    assert registry_of(app).bundle(BUNDLE).description in response.text
 
 
 async def test_the_sample_icon_meets_the_icon_rules(client):

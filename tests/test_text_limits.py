@@ -14,7 +14,7 @@ from app.formats import Format, dimensions
 from app.rendering import resolve_fields, resolve_template
 from app.schemas import MAX_FIELD_LENGTH, RenderRequest
 from app.templating import TemplateRegistry
-from tests.conftest import BUNDLES_DIR, CONTENT, image_base64, svg_base64
+from tests.conftest import BUILTIN_DIR, CONTENT, image_base64, svg_base64
 
 pytestmark = [pytest.mark.requires_chromium, pytest.mark.asyncio(loop_scope="module")]
 
@@ -87,7 +87,7 @@ IMAGE_PROBE = """
 }
 """
 
-REGISTRY = TemplateRegistry.load(BUNDLES_DIR)
+REGISTRY = TemplateRegistry.load(BUILTIN_DIR)
 FORMATS = [(spec.id, fmt) for spec in REGISTRY.specs for fmt in spec.formats]
 COPY_FIELDS = ("subline", "body", "cta")
 COPY = [

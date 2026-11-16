@@ -3,7 +3,6 @@ from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 
 from app.browser import FontNotLoaded, RenderBusy, RenderTimeout, RenderUnavailable
-from app.config import settings
 from app.errors import ApiError
 from app.formats import Format, dimensions
 from app.images import decode_icon, decode_image, file_data_uri
@@ -22,8 +21,10 @@ class ResolvedRender:
     icon: str | None
 
 
-def resolve_template(registry: TemplateRegistry, name: str | None) -> TemplateSpec:
-    wanted = settings.default_template if name is None else name
+def resolve_template(registry: TemplateRegistry, template_id: str | None) -> TemplateSpec:
+    wanted = registry.default_template if template_id is None else template_id
+    if wanted is None:
+        raise ApiError(400, f"Name a template. Available: {', '.join(registry.ids)}.")
     try:
         return registry.get(wanted)
     except UnknownTemplateError:
@@ -139,11 +140,3 @@ async def capture(
     except Exception as exc:
         logger.error("Render failed: %s: %s", type(exc).__name__, exc)
         raise ApiError(500, "Rendering failed.") from None
-
-
-def validate_defaults(registry: TemplateRegistry) -> None:
-    if settings.default_template not in registry.ids:
-        raise RuntimeError(
-            f"DEFAULT_TEMPLATE {settings.default_template!r} is not a known template. "
-            f"Available: {', '.join(registry.ids)}."
-        )

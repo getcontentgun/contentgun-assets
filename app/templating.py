@@ -65,7 +65,7 @@ class Bundle:
     environment: Environment
 
 
-def _skipped(directory: Path) -> bool:
+def skipped(directory: Path) -> bool:
     return directory.name.startswith(("_", "."))
 
 
@@ -302,7 +302,7 @@ def _load_bundle(directory: Path) -> Bundle:
     directories = (
         path
         for path in bundle_dir.iterdir()
-        if path.is_dir() and not _skipped(path) and path.name not in reserved
+        if path.is_dir() and not skipped(path) and path.name not in reserved
     )
     specs = {}
     for template_dir in sorted(directories):
@@ -321,28 +321,35 @@ def _load_bundle(directory: Path) -> Bundle:
     )
 
 
+def load_bundles(root: Path) -> dict[str, Bundle]:
+    """Every bundle in root by name, validated. A root without bundles gives an empty dict."""
+    if not root.is_dir():
+        raise RuntimeError(f"{root}: The bundle directory does not exist.")
+    bundles = {}
+    directories = (path for path in root.iterdir() if path.is_dir() and not skipped(path))
+    for directory in sorted(directories):
+        bundle = _load_bundle(directory)
+        bundles[bundle.name] = bundle
+    return bundles
+
+
 class TemplateRegistry:
-    def __init__(self, root: Path, bundles: dict[str, Bundle]):
-        self.root = root
+    """The templates one caller can use, from bundles that other registries may share, and the
+    template a request without one gets."""
+
+    def __init__(self, bundles: dict[str, Bundle], default_template: str | None = None):
         self._bundles = bundles
         self._specs = {
             spec.id: spec for bundle in bundles.values() for spec in bundle.specs.values()
         }
+        self.default_template = default_template
 
     @classmethod
-    def load(cls, root: Path) -> "TemplateRegistry":
-        if not root.is_dir():
-            raise RuntimeError(f"{root}: The bundle directory does not exist.")
-
-        bundles = {}
-        directories = (path for path in root.iterdir() if path.is_dir() and not _skipped(path))
-        for directory in sorted(directories):
-            bundle = _load_bundle(directory)
-            bundles[bundle.name] = bundle
-
+    def load(cls, root: Path, default_template: str | None = None) -> "TemplateRegistry":
+        bundles = load_bundles(root)
         if not bundles:
             raise RuntimeError(f"{root}: No bundles found.")
-        return cls(root, bundles)
+        return cls(bundles, default_template)
 
     @property
     def ids(self) -> list[str]:
