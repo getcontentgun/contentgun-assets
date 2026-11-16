@@ -1,6 +1,7 @@
 # Authentication
 
-All endpoints except `/health` require a bearer token.
+All endpoints require a bearer token, except `/health` and the two kinds of file URL, whose
+permission is the URL itself, see [Signed and random URLs](#signed-and-random-urls).
 
 ```
 Authorization: Bearer <key>
@@ -42,6 +43,19 @@ X-Contentgun-Tenant: <tenant>
 ```
 
 With a key of a tenant the header is ignored. Details in [Tenants](tenants/README.md#the-internal-key).
+
+[`POST /v1/admin/reload`](admin-reload.md) takes the internal key alone, without the header: it
+acts on the whole service. Every other key is a `401` there.
+
+## Signed and random URLs
+
+With [storage](storage/README.md) two kinds of URL work without a key, because the URL is the
+permission:
+
+- **`PUT /u/<token>`** takes one upload. The token names the tenant, the upload and an expiry 15 minutes ahead, signed with a key derived from `S3_SECRET_KEY`; a changed or expired token is a `403`. See [Uploads](uploads.md).
+- **`GET /o/…`** serves a stored result. Its path holds 192 random bits, so it cannot be guessed, and it answers until the result expires. See [`GET /o/…`](files.md).
+
+Hand these URLs only to whoever should upload or fetch the file.
 
 ## Responses
 

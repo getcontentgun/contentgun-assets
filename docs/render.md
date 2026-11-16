@@ -1,7 +1,8 @@
 # POST /v1/render
 
 Renders one social media card and returns it as a PNG. The response body is the image itself,
-not JSON.
+not JSON. With `"output": "url"` the service stores the PNG instead and answers with JSON that
+says where, see [Output as a URL](#output-as-a-url).
 
 ## Request
 
@@ -25,6 +26,9 @@ not JSON.
 | `image` | string | no | Base64 image for `demo/card-image` and `demo/carousel-content`, with or without a `data:image/...;base64,` prefix. PNG, JPEG or WebP, up to `MAX_IMAGE_BYTES` (8 MB by default) after decoding. `demo/card-image` uses it as its background and falls back to a fallback image of its own without one; `demo/carousel-content` shows it under the text, see [Image or icon on a content slide](#image-or-icon-on-a-content-slide) |
 | `icon` | string | no | Base64 SVG pictogram for `demo/carousel-content`, with or without a `data:image/svg+xml;base64,` prefix, up to 256 KB after decoding. Drawn under the text as a silhouette in one color. Never together with `image`. See [Image or icon on a content slide](#image-or-icon-on-a-content-slide) for what an SVG has to meet |
 | `icon_color` | string | no | The color of the icon: `accent`, the amber `#f2b33d` and the default, or `text`, the off-white text color `#f3efe6`. Anything else is a `400`. Without an icon it has no effect. Declared by `demo/carousel-content` |
+| `image_upload` | string | no | The id of an uploaded image, in place of `image`, see [Uploads](#uploads). Needs storage |
+| `icon_upload` | string | no | The id of an uploaded SVG icon, in place of `icon`. Needs storage |
+| `output` | string | no | `binary`, the default, answers with the PNG; `url` stores it and answers with JSON, see [Output as a URL](#output-as-a-url). Needs storage |
 
 A template of another bundle may declare fields of its own: `GET /v1/templates` lists them, and
 they take up to 200 characters unless the template sets a tighter limit. A field the selected
@@ -51,6 +55,42 @@ gradient drawn by `scripts/make_demo_backdrop.py`, so a request without an `imag
 instead of failing. A flow that stops sending images therefore keeps producing usable cards — and
 keeps doing so silently, so the `image_bytes` value in the log line is what tells you whether the
 card carried a real image. The log line carries `icon_bytes` the same way.
+
+### Uploads
+
+With [storage](storage/README.md) an image or an icon can come from an upload instead of base64
+in the body: `POST /v1/uploads` hands out an upload URL, the caller puts the file there with a
+plain `PUT`, and the request names it by its id, as described in [Uploads](uploads.md):
+
+```json
+{ "template": "demo/card-image", "headline": "Hallo", "image_upload": "up_Q2x8m0Wq1cR7nJb3TzVkLa5e" }
+```
+
+- **One source per graphic.** `image` and `image_upload` together are a `400`, and so are `icon` and `icon_upload`. An image from either source next to an icon from either source is a `400` as well.
+- **An upload is used as what it is.** An uploaded PNG, JPEG or WebP goes into `image_upload`, an uploaded SVG into `icon_upload`; the other way round is a `400` that names the right one.
+- **An upload belongs to its tenant** and lives for `STORAGE_TTL_HOURS`, 24 hours by default. An id of another tenant, an expired one and one that never existed are all `400` "Unknown upload".
+- An upload goes through the same checks as an `image` or `icon` in the body, when it arrives and again when it is used, so a card can only carry what passed them.
+
+### Output as a URL
+
+With `"output": "url"` and [storage](storage/README.md), the service stores the PNG and answers
+with JSON instead of the image:
+
+```json
+{
+  "ok": true,
+  "url": "https://files.contentgun.de/o/acme/k3E…/demo-card_4x5_1a2b3c4d.png",
+  "content_type": "image/png",
+  "width": 1080,
+  "height": 1350,
+  "bytes": 214733,
+  "expires_at": "2026-11-17T10:01:12Z"
+}
+```
+
+The URL needs no key: its 192 random bits are the permission, so it can go to whoever needs the
+image, such as a publishing API that fetches images from a public address. It answers until
+`expires_at`, `STORAGE_TTL_HOURS` after the render, see [`GET /o/…`](files.md).
 
 ### Field resolution
 
@@ -97,11 +137,13 @@ roughly 40 to 60 characters each, read well.
 | Status | Body | Description |
 |--------|------|-------------|
 | `200` | PNG bytes | `Content-Type: image/png`, plus `Content-Disposition: inline; filename="<bundle>-<template>_<format>_<id>.png"`, for example `demo-card_4x5_<id>.png`, and `Cache-Control: no-store` |
-| `400` | `{"ok": false, "error": "..."}` | Invalid JSON, failed validation, unknown template, unsupported format, field the template does not accept, field that is not a string, field over the template's own limit, an image or icon the template does not take, an image and an icon together, an image that is no PNG, JPEG or WebP, an icon that breaks one of the [SVG rules](#image-or-icon-on-a-content-slide) |
+| `200` | JSON | With `"output": "url"`: where the PNG is stored, see [Output as a URL](#output-as-a-url) |
+| `400` | `{"ok": false, "error": "..."}` | Invalid JSON, failed validation, unknown template, unsupported format, field the template does not accept, field that is not a string, field over the template's own limit, an image or icon the template does not take, an image and an icon together, a graphic from two sources, an image that is no PNG, JPEG or WebP, an icon that breaks one of the [SVG rules](#image-or-icon-on-a-content-slide), an unknown upload or one of the other kind |
 | `401` | `{"ok": false, "error": "Unauthorized."}` | Missing or wrong key |
 | `413` | `{"ok": false, "error": "..."}` | The decoded `image` exceeds `MAX_IMAGE_BYTES`, or the decoded `icon` exceeds 256 KB |
 | `500` | `{"ok": false, "error": "..."}` | Render failure, or a font of the template's bundle that did not load while `STRICT_FONTS` is on |
-| `503` | `{"ok": false, "error": "..."}` | The browser is not available, the service is shutting down, or all render slots were occupied longer than `QUEUE_TIMEOUT_MS` |
+| `501` | `{"ok": false, "error": "Storage is not configured on this server, so … cannot be used."}` | `"output": "url"`, `image_upload` or `icon_upload` without storage |
+| `503` | `{"ok": false, "error": "..."}` | The browser is not available, the service is shutting down, all render slots were occupied longer than `QUEUE_TIMEOUT_MS`, or the bucket did not answer |
 | `504` | `{"ok": false, "error": "Render timed out."}` | The render exceeded `RENDER_TIMEOUT_MS` |
 
 A `503` is worth retrying; a `400` never is.
@@ -363,8 +405,8 @@ Re-measure both formats, with and without a graphic, after changing a box, a siz
 - **Hyphenation happens in the service, not in the browser.** Chromium's own `hyphens: auto` needs dictionaries that the Linux headless shell does not ship, so a card would break differently in development and in production. The soft hyphens the service inserts are invisible unless a line actually breaks there.
 - **The handle is whatever the request sends.** Nothing fills it in, so a flow that forgets it gets a card without one instead of a wrong account. Keep it in the flow's configuration next to the target account.
 - **`$binary.<name>.data` is only base64 while n8n keeps binaries in memory.** With filesystem binary storage the property holds a reference instead, and the flow needs a node that converts the binary to base64 before the render call.
-- **The image or icon travels in the request and nowhere else.** Nothing is written to disk, the service keeps no image or icon directory, and the PNG in the response is the only copy it produces.
+- **An image or icon in the body travels in the request and nowhere else.** Nothing is written to disk, and the service keeps no image or icon directory. Only an upload and a result with `"output": "url"` are stored, in the bucket, for `STORAGE_TTL_HOURS`.
 - **Emoji are not supported.** They would render differently on macOS and Linux and are not part of the shipped font subsets.
 - The fonts of the template's bundle are embedded in the page as data URIs and the screenshot waits for them to load, so a card never renders in a fallback font. With `STRICT_FONTS=true` a font that fails to load is a `500` rather than a wrong-looking image.
 - Every text field is HTML-escaped. Markup in the request text appears as literal characters.
-- Nothing is stored server-side. Each call renders fresh and the PNG exists only in the response.
+- Each call renders fresh. Without `"output": "url"` the PNG exists only in the response.

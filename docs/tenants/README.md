@@ -103,6 +103,11 @@ bundles/                 the built-in bundles, in the repository and in the imag
 
 `BUNDLES_DIR` is empty by default. A relative path counts from the repository root.
 
+With [storage](../storage/README.md) and an empty `BUNDLES_DIR`, the bundles of the tenants come
+from `templates/<tenant>/<bundle>/` in the bucket instead, in the same layout and with the same
+checks. [`POST /v1/admin/reload`](../admin-reload.md) reads the tenants file and the bundles of the
+tenants again, from the bucket or from `BUNDLES_DIR`, without a restart.
+
 ## Default template
 
 A request without `template` gets the tenant's `default_template`, or `DEFAULT_TEMPLATE`
@@ -134,6 +139,7 @@ any other caller.
 - A template of another tenant is a `400` for an unknown template, never a `403`, and the list of available templates in the message names only the caller's own. Nothing tells a tenant what others have.
 - [`/health`](../health.md) needs no key, so it lists the built-in templates only, never a tenant or a template of one.
 - The log lines of render and document name the tenant, never a key or a hash.
+- Uploads and stored results belong to their tenant: an upload of another tenant is an unknown upload, and the bucket keeps them below `uploads/<tenant>/` and `outputs/<tenant>/`.
 - The [debug routes](../debug-index.md), unauthenticated and for development only, take the tenant as a query parameter.
 
 ## Startup validation
@@ -155,7 +161,8 @@ fault:
 - a bundle of a tenant has the name of a built-in bundle
 
 `bin/development` loads the tenants before uvicorn starts and reports them, so these problems show
-up before the first request.
+up before the first request. A reload runs the same checks and keeps the tenants in use when one
+fails.
 
 ## Moving from a flat BUNDLES_DIR
 

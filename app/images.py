@@ -5,6 +5,7 @@ import pyexpat
 import re
 from functools import lru_cache
 from pathlib import Path
+from typing import Literal
 from xml.etree import ElementTree
 
 from app.config import settings
@@ -25,6 +26,7 @@ WEBP_TAG = b"WEBP"
 ACCEPTED = "PNG, JPEG or WebP"
 
 MAX_ICON_BYTES = 262_144
+SVG_TYPE = "image/svg+xml"
 SVG_NAMESPACE = "http://www.w3.org/2000/svg"
 SVG_ROOT = f"{{{SVG_NAMESPACE}}}svg"
 SVG_STYLE = f"{{{SVG_NAMESPACE}}}style"
@@ -60,6 +62,14 @@ def _looks_like_markup(data: bytes) -> bool:
     return data.lstrip(b"\xef\xbb\xbf \t\r\n")[:1] == b"<"
 
 
+def _data_uri(mime: str, data: bytes) -> str:
+    return f"data:{mime};base64,{base64.b64encode(data).decode('ascii')}"
+
+
+def icon_limit() -> int:
+    return min(MAX_ICON_BYTES, settings.max_image_bytes)
+
+
 def verify_xml_parser() -> None:
     if pyexpat.version_info < MIN_EXPAT:
         raise RuntimeError(
@@ -74,7 +84,7 @@ def file_data_uri(path: Path) -> str:
     mime = _sniff(data)
     if mime is None:
         raise RuntimeError(f"Fallback image {path} is not a {ACCEPTED} file.")
-    return f"data:{mime};base64,{base64.b64encode(data).decode('ascii')}"
+    return _data_uri(mime, data)
 
 
 def data_uri_size(uri: str | None) -> int:
@@ -112,17 +122,18 @@ def _decode(raw: str, field: str, limit: int, kind: str) -> bytes:
     return data
 
 
-def decode_image(raw: str) -> str:
-    data = _decode(raw, "image", settings.max_image_bytes, "image")
-
+def image_data_uri(data: bytes) -> str:
+    """The image as a data URI, re-encoded from the bytes that were checked, so the page can only
+    ever receive what passed validation."""
     mime = _sniff(data)
     if mime is None:
         hint = " Send an SVG as 'icon'." if _looks_like_markup(data) else ""
         raise ApiError(400, f"Field 'image' must be a {ACCEPTED} image.{hint}")
+    return _data_uri(mime, data)
 
-    # Re-encoded from the bytes that were checked, so the page can only ever receive
-    # what passed validation.
-    return f"data:{mime};base64,{base64.b64encode(data).decode('ascii')}"
+
+def decode_image(raw: str) -> str:
+    return image_data_uri(_decode(raw, "image", settings.max_image_bytes, "image"))
 
 
 def _has_area(view_box: str | None) -> bool:
@@ -138,37 +149,54 @@ def _has_area(view_box: str | None) -> bool:
     )
 
 
-def _check_svg(root: ElementTree.Element) -> None:
+def _check_svg(root: ElementTree.Element, subject: str) -> None:
     if root.tag == "svg":
-        raise ApiError(400, f"Field 'icon' needs xmlns=\"{SVG_NAMESPACE}\" on its svg element.")
+        raise ApiError(400, f'{subject} needs xmlns="{SVG_NAMESPACE}" on its svg element.')
     if root.tag != SVG_ROOT:
-        raise ApiError(400, "Field 'icon' must be an SVG document.")
+        raise ApiError(400, f"{subject} must be an SVG document.")
     if not _has_area(root.get("viewBox")):
-        raise ApiError(400, "Field 'icon' needs a viewBox with a positive width and height.")
+        raise ApiError(400, f"{subject} needs a viewBox with a positive width and height.")
     for element in root.iter():
         if element.tag in ANIMATION_ELEMENTS or (
             element.tag == SVG_STYLE and KEYFRAMES.search(element.text or "")
         ):
-            raise ApiError(400, "Field 'icon' must not be animated.")
+            raise ApiError(400, f"{subject} must not be animated.")
         if element.tag in TEXT_ELEMENTS:
-            raise ApiError(400, "Field 'icon' must not contain text. Convert it to paths first.")
+            raise ApiError(400, f"{subject} must not contain text. Convert it to paths first.")
 
 
-def decode_icon(raw: str) -> str:
-    if raw.lstrip().startswith("<"):
-        raise ApiError(400, "Field 'icon' must be base64-encoded. Encode the SVG markup first.")
-
-    data = _decode(raw, "icon", min(MAX_ICON_BYTES, settings.max_image_bytes), "SVG")
-
+def icon_data_uri(data: bytes, subject: str = "Field 'icon'") -> str:
     if _sniff(data) is not None:
-        raise ApiError(400, f"Field 'icon' must be an SVG document. Send a {ACCEPTED} as 'image'.")
+        raise ApiError(400, f"{subject} must be an SVG document. Send a {ACCEPTED} as 'image'.")
 
     # The stdlib parser is safe here because verify_xml_parser() refuses an expat that
     # still expands entities without limit, and the size cap bounds everything else.
     try:
         root = ElementTree.fromstring(data)
     except ElementTree.ParseError:
-        raise ApiError(400, "Field 'icon' must be an SVG document.") from None
-    _check_svg(root)
+        raise ApiError(400, f"{subject} must be an SVG document.") from None
+    _check_svg(root, subject)
 
-    return f"data:image/svg+xml;base64,{base64.b64encode(data).decode('ascii')}"
+    return _data_uri(SVG_TYPE, data)
+
+
+def decode_icon(raw: str) -> str:
+    if raw.lstrip().startswith("<"):
+        raise ApiError(400, "Field 'icon' must be base64-encoded. Encode the SVG markup first.")
+    return icon_data_uri(_decode(raw, "icon", icon_limit(), "SVG"))
+
+
+def classify_upload(data: bytes) -> tuple[Literal["image", "icon"], str]:
+    """Whether an upload is an image or an icon, and its media type, after the same checks a
+    request's image or icon gets."""
+    if not data:
+        raise ApiError(400, "The upload is empty.")
+    mime = _sniff(data)
+    if mime is not None:
+        return "image", mime
+    if not _looks_like_markup(data):
+        raise ApiError(400, f"The upload must be a {ACCEPTED} image or an SVG icon.")
+    if len(data) > icon_limit():
+        raise ApiError(413, f"An SVG icon must be at most {readable_size(icon_limit())}.")
+    icon_data_uri(data, "The uploaded SVG")
+    return "icon", SVG_TYPE

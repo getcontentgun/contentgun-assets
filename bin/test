@@ -75,7 +75,10 @@ fi
 missing="$("${python}" - <<'PY'
 import importlib.util
 
-names = ("pytest", "httpx", "asgi_lifespan", "PIL", "ruff", "pyphen", "playwright", "mcp", "pypdf")
+names = (
+    "pytest", "httpx", "asgi_lifespan", "PIL", "ruff", "pyphen", "playwright", "mcp", "pypdf",
+    "boto3",
+)
 print(" ".join(name for name in names if importlib.util.find_spec(name) is None))
 PY
 )"

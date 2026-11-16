@@ -64,7 +64,9 @@ fi
 missing_runtime="$("${python}" - <<'PY'
 import importlib.util
 
-names = ("fastapi", "uvicorn", "jinja2", "playwright", "pydantic_settings", "pyphen", "pypdf")
+names = (
+    "fastapi", "uvicorn", "jinja2", "playwright", "pydantic_settings", "pyphen", "pypdf", "boto3",
+)
 print(" ".join(name for name in names if importlib.util.find_spec(name) is None))
 PY
 )"
@@ -99,18 +101,22 @@ if grep -Eqi '^[[:space:]]*DEBUG_ROUTES[[:space:]]*=[[:space:]]*"?(1|true|yes|on
 fi
 report ".env" "debug routes ${debug_routes}"
 
-# Five lines: keys, tenants, the source of the keys, and the folders of BUNDLES_DIR and
-# TENANTS_FILE, empty when unset.
+# Six lines: keys, tenants, the source of the keys, the folders of BUNDLES_DIR and
+# TENANTS_FILE, empty when unset, and the storage.
 if ! tenant_state="$("${python}" - <<'PY'
 import sys
 
 from app.config import settings
-from app.tenants import load_configured_tenants
+from app.files import configured_files
+from app.reloading import service_reloader
 
 try:
-    directory = load_configured_tenants()
+    files = configured_files()
+    reloader = service_reloader(files)
+    directory = reloader.start()
 except RuntimeError as error:
     sys.exit(str(error))
+reloader.close()
 if not directory.has_keys:
     sys.exit(
         "No API key is configured, so every authenticated route would answer 500.\n"
@@ -123,6 +129,11 @@ print(", ".join(f"{t.name} with {len(t.registry.ids)} templates" for t in direct
 print("tenants_file" if settings.tenants_file else "api_keys")
 print(settings.bundles_dir.resolve() if settings.bundles_dir else "")
 print(settings.tenants_file.resolve().parent if settings.tenants_file else "")
+if files is None:
+    print("off: results come back as files, uploads are off")
+else:
+    origin = "tenant bundles from there, " if settings.bundles_dir is None else ""
+    print(f"{files.storage.location('')}, {origin}files kept {files.ttl_hours} hours")
 PY
 )"; then
     exit 1
@@ -132,6 +143,7 @@ bundles_dir="$(sed -n '4p' <<<"${tenant_state}")"
 tenants_dir="$(sed -n '5p' <<<"${tenant_state}")"
 report "keys" "$(sed -n '1p' <<<"${tenant_state}")"
 report "tenants" "$(sed -n '2p' <<<"${tenant_state}")"
+report "storage" "$(sed -n '6p' <<<"${tenant_state}")"
 
 if ! chromium_state="$("${python}" - <<'PY'
 import sys

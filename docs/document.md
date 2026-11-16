@@ -1,7 +1,8 @@
 # POST /v1/document
 
 Renders several slides into one PDF, one page per slide, for LinkedIn document posts, which show
-every page of a PDF as a slide. The response body is the PDF itself, not JSON.
+every page of a PDF as a slide. The response body is the PDF itself, not JSON, or with
+`"output": "url"` JSON that says where the PDF is stored.
 
 ## Request
 
@@ -22,10 +23,11 @@ every page of a PDF as a slide. The response body is the PDF itself, not JSON.
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `slides` | array | yes | 1 to 20 slides in page order. Each one is exactly a request body for [`POST /v1/render`](render.md): `template`, `format` and the template's fields, with the same limits |
+| `output` | string | no | `binary`, the default, answers with the PDF; `url` stores it and answers with JSON like [a render](render.md#output-as-a-url), with `pages` added. Needs [storage](storage/README.md). It belongs to the document: on a slide it is a `400` |
 
 - **Every slide uses the same format.** A slide without `format` counts as its template's first format. Mixed formats are a `400`, because a PDF has one page size and LinkedIn shows a document in one aspect ratio.
-- **Images and icons share one budget.** A slide carries an `image` or an `icon` like its render request does, and all of them in a document together may be at most `MAX_IMAGE_BYTES` (8 MB by default) after decoding, or the whole request is a `413`, before any slide is decoded. Fallback images do not count, so `demo/card-image` without an image still works and uses its own.
-- **No other top-level keys.** Anything next to `slides` is a `400`.
+- **Images and icons share one budget.** A slide carries an `image` or an `icon` like its render request does, or an `image_upload` or `icon_upload`, and all of them in a document together may be at most `MAX_IMAGE_BYTES` (8 MB by default) after decoding, or the whole request is a `413`, before any slide is decoded. Uploads count with their stored size, read before any of them is fetched. Fallback images do not count, so `demo/card-image` without an image still works and uses its own.
+- **No other top-level keys.** Anything next to `slides` and `output` is a `400`.
 - **Errors name the slide.** A field that fails validation is reported with its position counted from 0, as in `slides.2.headline: String should have at most 140 characters.`. An error from the template, such as an unknown template or a field it does not declare, is counted from 1, as in `Slide 3: Field 'cta' is not accepted by template 'demo/carousel-content'. …`.
 
 Every slide is validated before the first one is rendered, so a broken request gets its `400`
@@ -48,11 +50,13 @@ therefore takes about as long as ten PNGs.
 | Status | Body | Description |
 |--------|------|-------------|
 | `200` | PDF bytes | `Content-Type: application/pdf`, plus `Content-Disposition: inline; filename="document_<format>_<id>.pdf"`, for example `document_4x5_<id>.pdf`, and `Cache-Control: no-store` |
-| `400` | `{"ok": false, "error": "..."}` | Invalid JSON, a slide that fails validation, mixed formats, a key next to `slides` |
+| `200` | JSON | With `"output": "url"`: `url`, `content_type`, `width` and `height` of the format in px, `bytes`, `expires_at` and `pages` |
+| `400` | `{"ok": false, "error": "..."}` | Invalid JSON, a slide that fails validation, mixed formats, a key next to `slides` and `output`, `output` on a slide, an unknown upload on a slide |
 | `401` | `{"ok": false, "error": "Unauthorized."}` | Missing or wrong key |
 | `413` | `{"ok": false, "error": "..."}` | The images and icons of all slides together exceed `MAX_IMAGE_BYTES`, or one icon exceeds 256 KB, reported with its slide |
 | `500` | `{"ok": false, "error": "..."}` | Render failure, or a font of a slide's bundle that did not load while `STRICT_FONTS` is on |
-| `503` | `{"ok": false, "error": "..."}` | The browser is not available, the service is shutting down, or a render slot stayed occupied longer than `QUEUE_TIMEOUT_MS` |
+| `501` | `{"ok": false, "error": "..."}` | `"output": "url"` or an upload on a slide without storage |
+| `503` | `{"ok": false, "error": "..."}` | The browser is not available, the service is shutting down, a render slot stayed occupied longer than `QUEUE_TIMEOUT_MS`, or the bucket did not answer |
 | `504` | `{"ok": false, "error": "Render timed out."}` | A slide exceeded `RENDER_TIMEOUT_MS` |
 
 ## Example (curl)
@@ -74,4 +78,4 @@ curl -sS --fail-with-body -o carousel.pdf \
 ## Notes
 
 - **The pages look exactly like the PNGs.** Same templates, same limits and the same guarantee that text is never cut off, see [Text limits](render.md#text-limits).
-- Nothing is stored server-side. Each call renders fresh and the PDF exists only in the response.
+- Each call renders fresh. Without `"output": "url"` the PDF exists only in the response.

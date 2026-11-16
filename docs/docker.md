@@ -91,6 +91,34 @@ The keys then belong to the tenants, see [Tenants](tenants/README.md). Mount a f
 `BUNDLES_DIR`, not the root of a file system: a `lost+found` folder there would belong to no tenant
 and stop the start.
 
+## Storage in the container
+
+The profile `storage` of `compose.dev.yaml` adds RustFS, an S3-compatible store, as the service
+`storage` on `127.0.0.1:9010` with its console on `127.0.0.1:9011` and its data in the volume
+`storage`. `STORAGE_PORT` and `STORAGE_CONSOLE_PORT` in `.env` move the two ports of the host, as
+`PORT` moves the one of the service. On its own it serves the service on the host:
+
+```
+docker compose -f compose.dev.yaml --profile storage up -d storage
+```
+
+With the service in the container as well, the endpoint differs: inside the container `127.0.0.1`
+is the container itself, and RustFS is `http://storage:9000`, on its own port rather than the one
+of the host. Compose therefore passes
+`S3_ENDPOINT_IN_COMPOSE` from `.env` as `S3_ENDPOINT`, and `S3_ENDPOINT` itself where it is unset:
+
+```
+S3_ENDPOINT_IN_COMPOSE=http://storage:9000
+```
+
+```
+docker compose -f compose.dev.yaml --profile storage up --build
+```
+
+The other storage settings stay as they are; `PUBLIC_FILES_URL` is the address the host reaches the
+container under. The whole flow, the bucket and the checks are in
+[Storage](storage/README.md#locally-with-rustfs).
+
 ## Health
 
 `/health` answers `503` until Chromium is connected, so the container only turns healthy once it

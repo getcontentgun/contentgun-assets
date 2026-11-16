@@ -6,6 +6,8 @@ from app.formats import Format
 
 MAX_FIELD_LENGTH = 200
 
+Output = Literal["binary", "url"]
+
 
 class RenderRequest(BaseModel):
     # Extra keys are allowed so a new template's fields work without a schema change;
@@ -28,9 +30,14 @@ class RenderRequest(BaseModel):
     image: str | None = None
     icon: str | None = None
     icon_color: Literal["accent", "text"] | None = None
+    image_upload: str | None = Field(default=None, max_length=64)
+    icon_upload: str | None = Field(default=None, max_length=64)
+    output: Output | None = None
 
 
-RESERVED_KEYS = frozenset({"template", "format", "image", "icon"})
+RESERVED_KEYS = frozenset(
+    {"template", "format", "image", "icon", "image_upload", "icon_upload", "output"}
+)
 
 MAX_DOCUMENT_SLIDES = 20
 
@@ -39,6 +46,45 @@ class DocumentRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     slides: list[RenderRequest] = Field(min_length=1, max_length=MAX_DOCUMENT_SLIDES)
+    output: Output | None = None
+
+
+class StoredFileResponse(BaseModel):
+    ok: bool = True
+    url: str
+    content_type: str
+    width: int
+    height: int
+    bytes: int
+    expires_at: str
+    pages: int | None = None
+
+
+class UploadTicketResponse(BaseModel):
+    ok: bool = True
+    upload_id: str
+    upload_url: str
+    expires_at: str
+    max_bytes: int
+
+
+class UploadResponse(BaseModel):
+    ok: bool = True
+    upload_id: str
+    kind: Literal["image", "icon"]
+    content_type: str
+    bytes: int
+    expires_at: str
+
+
+class TenantSummary(BaseModel):
+    name: str
+    templates: int
+
+
+class ReloadResponse(BaseModel):
+    ok: bool = True
+    tenants: list[TenantSummary]
 
 
 class FormatInfo(BaseModel):

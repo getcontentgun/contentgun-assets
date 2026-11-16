@@ -54,15 +54,39 @@ def key_digest(key: str) -> bytes:
     return hashlib.sha256(key.encode("utf-8")).digest()
 
 
+@dataclass(frozen=True)
+class TenantSource:
+    """What the tenants were loaded from, so that a reload can read it again."""
+
+    builtin_dir: Path
+    bundles_dir: Path | None
+    tenants_file: Path | None
+    api_keys: tuple[str, ...]
+    internal_key: str
+    default_template: str
+
+    def load(self) -> "TenantDirectory":
+        return load_tenants(
+            builtin_dir=self.builtin_dir,
+            bundles_dir=self.bundles_dir,
+            tenants_file=self.tenants_file,
+            api_keys=self.api_keys,
+            internal_key=self.internal_key,
+            default_template=self.default_template,
+        )
+
+
 class TenantDirectory:
     def __init__(
         self,
         tenants: dict[str, Tenant],
         builtin: dict[str, Bundle],
+        source: TenantSource,
         internal_digest: bytes | None = None,
     ):
         self._tenants = tenants
         self._builtin = builtin
+        self.source = source
         credentials: list[tuple[Tenant | Internal, bytes]] = [
             (tenant, digest) for tenant in tenants.values() for digest in tenant.key_hashes
         ]
@@ -306,6 +330,9 @@ def load_tenants(
     """Every tenant with the keys it authenticates with and the templates it may use: the
     built-in bundles and the bundles of its own folder in bundles_dir, validated once, at
     startup. Without a tenants file, api_keys make up the one tenant 'default'."""
+    source = TenantSource(
+        builtin_dir, bundles_dir, tenants_file, tuple(api_keys), internal_key, default_template
+    )
     builtin = load_bundles(builtin_dir) if builtin_dir.is_dir() else {}
 
     if tenants_file is None:
@@ -342,15 +369,19 @@ def load_tenants(
                     f"INTERNAL_KEY is also an API key of tenant {tenant.name!r}. Give the internal "
                     "key a value of its own."
                 )
-    return TenantDirectory(tenants, builtin, internal_digest)
+    return TenantDirectory(tenants, builtin, source, internal_digest)
 
 
-def load_configured_tenants() -> TenantDirectory:
-    return load_tenants(
+def configured_source() -> TenantSource:
+    return TenantSource(
         builtin_dir=BUILTIN_BUNDLES_DIR,
         bundles_dir=settings.bundles_dir,
         tenants_file=settings.tenants_file,
-        api_keys=settings.api_key_list,
+        api_keys=tuple(settings.api_key_list),
         internal_key=settings.internal_key,
         default_template=settings.default_template,
     )
+
+
+def load_configured_tenants() -> TenantDirectory:
+    return configured_source().load()

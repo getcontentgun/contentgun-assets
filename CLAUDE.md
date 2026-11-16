@@ -4,8 +4,10 @@
 
 The asset module of Contentgun: a FastAPI service that renders social media cards to PNG, and
 carousels to one PDF. A request carries text, the service fills a Jinja2 HTML template, loads it
-into headless Chromium and screenshots it. There is no AI in the rendering path and nothing is
-stored: the PNG is the response body.
+into headless Chromium and screenshots it. There is no AI in the rendering path, and without
+storage nothing is stored: the PNG is the response body. With an S3-compatible bucket the service
+also stores results behind URLs, takes uploads through signed URLs and reads the bundles of the
+tenants from the bucket, see `docs/storage/README.md`.
 
 It replaced the Gemini image nodes in the contentgun n8n flows, which produced non-deterministic
 cards with typography errors.
@@ -23,12 +25,17 @@ bin/test --suite -k render                        # pytest only
 .venv/bin/ruff check . && .venv/bin/ruff format --check .
 docker compose -f compose.dev.yaml up --build     # the service in a container
 python3 scripts/new_api_key.py                    # a key and its hash for the tenants file
+docker compose -f compose.dev.yaml --profile storage up -d storage   # RustFS on 127.0.0.1:9010
+.venv/bin/python scripts/setup_storage.py         # create the bucket, set its lifecycle rules
+.venv/bin/python scripts/put_bundles.py <folder>  # the bundles of one tenant into the bucket
 ```
 
 Startup prerequisites: `.env` exists with a key in `API_KEYS` or a tenants file in `TENANTS_FILE`,
 the tenants and their bundles are valid (the built-in ones in `bundles/`, those of the tenants in
-`BUNDLES_DIR`), and Playwright's Chromium is installed. A broken bundle or tenants file fails at
-import time with a message naming the file; a missing Chromium fails when the lifespan starts.
+`BUNDLES_DIR`, or in the bucket), the storage settings are complete or all empty, and Playwright's
+Chromium is installed. A broken bundle or tenants file, incomplete storage settings or an
+unreachable bucket that should hold the bundles fail at import time with a message naming the file
+or the setting; a missing Chromium fails when the lifespan starts.
 
 ## Architecture
 
@@ -48,15 +55,19 @@ import time with a message naming the file; a missing Chromium fails when the li
 | `app/rendering.py` | Resolves template, format, fields and image from a request, and turns render failures into API errors |
 | `app/browser.py` | Chromium lifecycle, concurrency semaphore, screenshot and PDF print, font verification |
 | `app/document.py` | Joins the one-page PDFs of `POST /v1/document` into one file with pypdf |
-| `app/routers/` | One module per endpoint group |
+| `app/storage.py` | The storage interface, `S3Storage` on boto3, and the storage settings, all or none |
+| `app/files.py` | Results and uploads in the bucket: their keys, their expiry, the signed upload URLs, and the uploads one tenant may use |
+| `app/reloading.py` | Copies the bundles of the tenants from the bucket into a local folder, and the `Reloader` that loads the tenants at startup and for `POST /v1/admin/reload` |
+| `app/routers/` | One module per endpoint group; `outputs.py` serves `/o/…`, `uploads.py` hands out and takes uploads, `admin.py` reloads |
 | `bundles/<bundle>/` | A built-in template bundle, which every tenant can use: `bundle.toml`, `fonts/`, `assets/` and one folder per template with `template.toml` + `template.html.j2` + `template.css`. Format in `docs/bundles/README.md` |
 | `scripts/new_api_key.py` | Creates a key and the hash for the tenants file, or hashes an existing key. Standard library only |
+| `scripts/setup_storage.py`, `scripts/put_bundles.py` | Create the bucket of the settings and set its lifecycle rules; copy the bundles of one tenant into it |
 | `tenants.example.toml` | The form of a tenants file, with placeholder hashes that stop the start |
 | `bundles/demo/_base/` | Shared skeleton and CSS of every template of the demo bundle. Not a template: the registry skips it because of the leading underscore |
 | `mcp/` | Local stdio MCP server for the Claude desktop app, a client of the HTTP API. A plain folder, not a package; never deployed. See `docs/mcp/README.md` |
 | `bin/test` | Linters and the test suite as stages, with a summary and `--lint`/`--suite`/`--bail` |
 | `docker/assets.Dockerfile` | The image of the service, on Microsoft's Playwright image, with the built-in bundles and no bundle of a tenant. See `docs/docker.md` |
-| `compose.dev.yaml` | Runs the image locally with `./bundles` mounted over the built-in bundles and the configuration from `.env` |
+| `compose.dev.yaml` | Runs the image locally with `./bundles` mounted over the built-in bundles and the configuration from `.env`; the profile `storage` adds RustFS |
 
 `app/rendering.py` is shared by the render, document and debug routes on purpose: the browser
 screenshots and prints exactly the HTML the debug route serves, so the design preview cannot drift
@@ -116,8 +127,22 @@ fills one in, so a card can only carry the identity its caller sent.
 - **`authenticate()` compares against every stored hash without stopping at a match.** The time a request takes must not tell which key, or which tenant, matched. Keys are stored as SHA-256 hashes only, which is enough for keys with 256 random bits; the `sha256:` prefix in the tenants file is what tells a hash from a pasted key, since a key from `openssl rand -hex 32` is 64 hex digits too, and the startup message for a bad entry leaves the entry out.
 - **The internal key needs `X-Contentgun-Tenant`; a key of a tenant ignores it.** Only `INTERNAL_KEY` may name the tenant per request. Were the header honoured for every key, any tenant could act as any other.
 - **A bundle of a tenant must not share a name with a built-in one, and every folder in `BUNDLES_DIR` must belong to a tenant.** Both stop the start: the first so that an id means the same template for everyone, the second because a bundle folder left right in `BUNDLES_DIR`, the layout before tenants, would otherwise silently disappear.
+- **Storage is all or none.** `storage_settings()` stops the start when some but not all of the five S3 settings and `PUBLIC_FILES_URL` are set. A blank value counts as unset, which the suite relies on to pin all six to empty.
+- **boto3 sends checksums only where the API requires them, and addresses buckets by path.** botocore 1.36 and later adds CRC32 checksums to every upload by default, which S3-compatible stores reject or mangle; `S3Storage` sets `request_checksum_calculation` and `response_checksum_validation` to `when_required`, and path-style addressing needs no DNS name per bucket. `tests/test_storage.py` pins both.
+- **Every storage call blocks, so it runs in a thread.** boto3 is synchronous: `app/files.py` and `app/reloading.py` call the storage through `asyncio.to_thread`, and `StreamingResponse` iterates the body of `/o/…` in Starlette's thread pool. A direct call from a route would stall the event loop, every render included.
+- **The storage method is `keys`, not `list`.** A method named `list` shadows the builtin in the class body, so the annotation `-> list[str]` of every method after it fails at import.
+- **The expiry lives in the object's metadata and is checked on every access.** `expires-at` holds Unix seconds; an object without it, one put into the bucket by hand for instance, is never served and never usable as an upload. The lifecycle rule of the bucket only frees space, it does not make anything expire.
+- **`/o/…` takes its `Content-Type` from the file name, never from the bucket.** Only `.png` and `.pdf` names under `outputs/` match its pattern, so nothing else in the bucket can ever be served on the service's domain, as HTML for instance.
+- **An upload token is checked by its signature first, and only then for its expiry.** It is `<tenant>.<upload id>.<expiry>.<signature>`, HMAC-SHA256 with a key derived from `S3_SECRET_KEY`, so new S3 credentials invalidate the upload URLs handed out before. That a URL took a file already is checked with a `head` before the `put`: two uploads racing on one URL may both land, and the later one wins.
+- **Uploads are classified when they arrive and checked again when they are used.** `classify_upload()` runs the checks of a request's image or icon, and `resolve_upload()` turns the bytes into a data URI through the same `image_data_uri()` and `icon_data_uri()` as base64 in the body, so a changed object in the bucket cannot reach a page unchecked.
+- **`resolve_render()` is async,** because an upload is fetched from the bucket while the request resolves. The debug route uses the synchronous parts, `resolve_image()` and its siblings, and takes no uploads.
+- **A document measures its uploads before it fetches them.** `upload_size()` reads only the metadata of each upload, so the shared budget of `MAX_IMAGE_BYTES` stops a request before twenty large uploads are pulled into memory.
+- **The bundles of the tenants come from the bucket only while `BUNDLES_DIR` is empty.** Set it, and the folder wins even with storage; that is how bundles are worked on locally while outputs and uploads go to a bucket.
+- **A reload swaps `app.state.tenants` in one assignment, after everything is validated.** Requests reach the directory through the auth dependency, so one that started earlier finishes with the registry it began with. `BundleCache` keeps the local copy before the current one for such requests and deletes older ones; a reload that fails discards only its own copy.
+- **Messages about bundles from the bucket name the key, not the local copy.** `BundleCache.in_bucket()` replaces the path of the copy in every message of `load_tenants()`. A key with `..`, `.`, an empty part or a backslash stops the copy before anything is written.
+- **`TenantSource` keeps what the tenants were loaded from.** `load_tenants()` attaches it to the directory, so a reload of an app built from a `TenantDirectory`, as every test app is, reads the same tenants file and folders again.
 - **The debug routes take the tenant as a query parameter.** They are unauthenticated, so no key names it. With one tenant it is optional and the links of the overview leave it out; with several, `/v1/debug` lists the tenants and `/v1/debug/html` requires it.
-- **The suite pins `API_KEYS`, `TENANTS_FILE`, `INTERNAL_KEY`, `BUNDLES_DIR` and `DEFAULT_TEMPLATE` in `tests/conftest.py`,** the paths and the internal key to blank, so a variable in the shell or in `.env` cannot change what it tests. The tests address templates through the id constants there, build small bundles of their own with `write_bundle()`, which borrows a font file from the bundle under test, and build apps with tenants of their own through `tenants_for()`; `tenant_app` holds three tenants with a bundle each, one of which leaves out `demo`.
+- **The suite pins `API_KEYS`, `TENANTS_FILE`, `INTERNAL_KEY`, `BUNDLES_DIR`, `DEFAULT_TEMPLATE` and the storage settings in `tests/conftest.py`,** the paths, the internal key and the storage to blank, so a variable in the shell or in `.env` cannot change what it tests. Storage in the tests is `MemoryStorage` from `tests/memory_storage.py`, behind `files_of()`; `storage_app` holds the three tenants of `tenant_app` with it. The tests address templates through the id constants there, build small bundles of their own with `write_bundle()`, which borrows a font file from the bundle under test, and build apps with tenants of their own through `tenants_for()`; `tenant_app` holds three tenants with a bundle each, one of which leaves out `demo`.
 - **A SIGKILLed uvicorn leaves Chromium behind.** Clean up with `pkill -f chromium_headless_shell`.
 - **`mcp/` is a plain folder, not a package.** The desktop app runs the folder directly, which puts it on the import path, so its modules import each other flat (`from config import ...`). An `__init__.py` in it would make it a package named `mcp` that shadows the SDK of the same name; without one, Python prefers the installed SDK. Its module names must therefore not collide with `app`, `tests` or an installed package, and `pyproject.toml` keeps `mcp` third-party for ruff and puts the folder on pytest's path.
 - **stdout belongs to the MCP protocol.** Nothing in `mcp/` may print: a stray line corrupts the stream and the desktop app drops the server. `main()` logs to stderr, which the app collects in `~/Library/Logs/Claude/mcp-server-contentgun-assets.log`.
@@ -142,10 +167,10 @@ and inlines the SVG from there, so it stays crisp and can inherit `currentColor`
 
 - Identifiers, comments, log lines and `docs/` are English. There is no user-facing German text in this service; German only appears as sample content.
 - Error envelope: `{"ok": false, "error": "A full sentence."}`. Error strings end with a period.
-- Versioned paths `/v1/<resource>`. `/health` stays unversioned.
+- Versioned paths `/v1/<resource>`. `/health` stays unversioned, and so do `/o/…` and `/u/…`, the file URLs the service hands to callers.
 - Bearer only. A key in a query parameter is never accepted.
 - Dependencies are pinned with `==` in `requirements.txt`; dev-only tools live in `requirements-dev.txt`, the MCP server's in `requirements-mcp.txt`, which `requirements-dev.txt` includes.
-- Never log the rendered text, a key or a key hash. Tenant name, template, format and headline length are fine.
+- Never log the rendered text, a key, a key hash, a storage credential or a URL the service hands out. Tenant name, template, format, headline length, upload id and sizes are fine.
 - Changing an endpoint means updating the table in `docs/README.md` and the endpoint's own page.
 - A feature beyond the HTTP API gets a folder of its own under `docs/`, such as `docs/mcp/`: its implementation plan while it is being built, its documentation as `README.md` once it exists. The API reference stays in `docs/` itself, one page per endpoint.
 - Commits follow Conventional Commits (`feat:`, `fix:`, `chore:`).

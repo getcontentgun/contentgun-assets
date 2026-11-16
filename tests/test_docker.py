@@ -43,3 +43,49 @@ def test_compose_publishes_the_image_port_on_localhost_only():
 
 def test_the_service_runs_as_the_unprivileged_user():
     assert re.search(r"^USER pwuser$", DOCKERFILE, re.M)
+
+
+def service(name: str) -> str:
+    """The block of one service in compose.dev.yaml, up to the next one."""
+    match = re.search(rf"^  {name}:\n(.*?)(?=^  \S|^\S|\Z)", COMPOSE, re.M | re.S)
+    assert match is not None, name
+    return match.group(1)
+
+
+def test_the_storage_starts_only_with_its_profile():
+    assert re.search(r'^\s+profiles: \["storage"\]$', service("storage"), re.M)
+    assert "profiles" not in service("assets")
+
+
+def test_the_storage_is_pinned_and_published_on_localhost_only():
+    block = service("storage")
+    assert re.search(r"^\s+image: rustfs/rustfs:\d+\.\d+\.\d+$", block, re.M)
+    ports = re.findall(r'^\s+- "?([^"\n]+)"?$', block.split("environment:")[0], re.M)
+    assert ports and all(port.startswith("127.0.0.1:") for port in ports)
+
+
+def storage_host_port(variable: str, inside: int) -> str:
+    mapping = rf'^\s+- "127\.0\.0\.1:\$\{{{variable}:-(\d+)\}}:{inside}"$'
+    match = re.search(mapping, service("storage"), re.M)
+    assert match is not None, variable
+    return match.group(1)
+
+
+def test_the_storage_ports_of_the_host_can_be_moved():
+    assert storage_host_port("STORAGE_PORT", 9000)
+    assert storage_host_port("STORAGE_CONSOLE_PORT", 9001)
+
+
+def test_the_example_endpoint_names_the_storage_port_of_the_host():
+    example = (ROOT / ".env.example").read_text(encoding="utf-8")
+    port = storage_host_port("STORAGE_PORT", 9000)
+    assert f"# S3_ENDPOINT=http://127.0.0.1:{port}\n" in example
+
+
+def test_the_container_reaches_the_storage_by_its_service_name():
+    # .env names the storage as the host sees it, and env_file would pass that on unchanged.
+    assert re.search(
+        r"^\s+S3_ENDPOINT: \$\{S3_ENDPOINT_IN_COMPOSE:-\$\{S3_ENDPOINT:-\}\}$",
+        service("assets"),
+        re.M,
+    )

@@ -24,6 +24,16 @@ os.environ["BUNDLES_DIR"] = ""
 os.environ["DEBUG_ROUTES"] = "true"
 os.environ["STRICT_FONTS"] = "true"
 os.environ["DEFAULT_TEMPLATE"] = CARD
+for variable in (
+    "S3_ENDPOINT",
+    "S3_REGION",
+    "S3_BUCKET",
+    "S3_ACCESS_KEY",
+    "S3_SECRET_KEY",
+    "PUBLIC_FILES_URL",
+):
+    os.environ[variable] = ""
+os.environ["STORAGE_TTL_HOURS"] = "24"
 
 import base64  # noqa: E402
 import hashlib  # noqa: E402
@@ -41,9 +51,11 @@ from fastapi import FastAPI  # noqa: E402
 from httpx import ASGITransport, AsyncClient  # noqa: E402
 from PIL import Image  # noqa: E402
 
+from app.files import Files  # noqa: E402
 from app.main import create_app  # noqa: E402
 from app.templating import TemplateRegistry  # noqa: E402
 from app.tenants import SHORT_FORM_TENANT, TenantDirectory, load_tenants  # noqa: E402
+from tests.memory_storage import MemoryStorage  # noqa: E402
 
 API_KEY = API_KEYS[0]
 AUTH = {"Authorization": f"Bearer {API_KEY}"}
@@ -278,6 +290,40 @@ def tenant_app(tmp_path_factory):
 @pytest.fixture
 async def tenant_client(tenant_app):
     async with client_of(tenant_app) as instance:
+        yield instance
+
+
+# The storage of the suite: a dict behind the storage interface, reached at FILES_URL.
+FILES_URL = "http://files.test"
+FILES_SECRET = "secret-key-of-the-test-storage"
+
+
+def files_of(storage: MemoryStorage) -> Files:
+    return Files(storage, FILES_URL, 24, FILES_SECRET)
+
+
+@pytest.fixture(scope="module")
+def storage_app(tmp_path_factory):
+    """The three tenants of tenant_app, with storage."""
+    bundles, tenants_file = write_tenants(tmp_path_factory.mktemp("storage-tenants"))
+    return create_app(
+        tenants_for(bundles_dir=bundles, tenants_file=tenants_file, internal_key=INTERNAL_KEY),
+        files=files_of(MemoryStorage()),
+    )
+
+
+@pytest.fixture
+def storage(storage_app) -> MemoryStorage:
+    """The storage of storage_app, emptied and working for every test."""
+    storage = storage_app.state.files.storage
+    storage.objects.clear()
+    storage.failing = False
+    return storage
+
+
+@pytest.fixture
+async def storage_client(storage_app, storage):
+    async with client_of(storage_app) as instance:
         yield instance
 
 

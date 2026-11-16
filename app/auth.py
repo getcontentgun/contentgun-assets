@@ -43,3 +43,13 @@ async def current_tenant(
 
 
 CurrentTenant = Annotated[Tenant, Depends(current_tenant)]
+
+
+async def internal_access(
+    request: Request, authorization: str | None = Header(default=None)
+) -> None:
+    """The internal key alone, for routes that act on the whole service rather than on a
+    tenant."""
+    directory: TenantDirectory = request.app.state.tenants
+    if directory.authenticate(_bearer(authorization)) is not Internal.ACCESS:
+        raise ApiError(401, "Unauthorized.", UNAUTHORIZED_HEADERS)

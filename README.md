@@ -17,8 +17,10 @@ its own, which live outside the repository in its folder under `BUNDLES_DIR`. A 
 one tenant, whose keys are `API_KEYS`; several tenants come from a tenants file, see
 [docs/tenants/README.md](docs/tenants/README.md).
 
-Nothing is stored: a request image or icon lives in the request only, the PNG or PDF in the
-response.
+Without storage nothing is stored: a request image or icon lives in the request only, the PNG or
+PDF in the response. With an S3-compatible bucket the service also hands out results as URLs,
+takes uploads through signed URLs and reads the bundles of the tenants from the bucket, see
+[docs/storage/README.md](docs/storage/README.md).
 
 ## Requirements
 
@@ -96,6 +98,18 @@ Builds the image from `docker/assets.Dockerfile`, which carries the built-in bun
 of the host with `PORT`. Image, configuration, tenants in the container and the health check are
 described in [docs/docker.md](docs/docker.md).
 
+## Storage
+
+```
+docker compose -f compose.dev.yaml --profile storage up -d storage
+.venv/bin/python scripts/setup_storage.py
+```
+
+Starts RustFS, an S3-compatible store, on `127.0.0.1:9010` and prepares its bucket, for results as
+URLs, uploads and bundles from the bucket. `STORAGE_PORT` in `.env` moves it to another port. The
+settings that go into `.env` and the whole flow are in
+[docs/storage/README.md](docs/storage/README.md).
+
 ## Looking at a template
 
 A `template.html.j2` cannot be opened directly: it is a Jinja template with placeholders, and the
@@ -138,7 +152,8 @@ troubleshooting are in [docs/mcp/README.md](docs/mcp/README.md).
 
 [docs/README.md](docs/README.md) is the API reference: one page per endpoint, plus the
 authentication rules. [docs/tenants/README.md](docs/tenants/README.md) describes tenants, keys and
-the tenants file. [CLAUDE.md](CLAUDE.md) holds the architecture and the pitfalls of the rendering.
+the tenants file, [docs/storage/README.md](docs/storage/README.md) the bucket. [CLAUDE.md](CLAUDE.md)
+holds the architecture and the pitfalls of the rendering.
 
 ## Configuration
 
@@ -155,6 +170,9 @@ the tenants file. [CLAUDE.md](CLAUDE.md) holds the architecture and the pitfalls
 | `MAX_IMAGE_BYTES` | `8388608` | Largest decoded image a request may carry, and the budget of all images and icons of a document together, then `413`. An icon is capped at 256 KB below that |
 | `BUNDLES_DIR` | empty | The folder with one subfolder per tenant, holding the bundles of that tenant. Empty means the built-in bundles only. A relative path counts from the repository root |
 | `DEFAULT_TEMPLATE` | `demo/card` | The template id used when the request omits `template`, for every tenant without a `default_template` of its own |
+| `S3_ENDPOINT`, `S3_REGION`, `S3_BUCKET`, `S3_ACCESS_KEY`, `S3_SECRET_KEY` | empty | The bucket for results, uploads and the bundles of the tenants, see [docs/storage/README.md](docs/storage/README.md). All of them with `PUBLIC_FILES_URL`, or none |
+| `PUBLIC_FILES_URL` | empty | The address under which callers reach `/o/` and `/u/` of the service |
+| `STORAGE_TTL_HOURS` | `24` | How long results and uploads stay available |
 
 The handle on the card comes from the request. There is no server-side account list.
 

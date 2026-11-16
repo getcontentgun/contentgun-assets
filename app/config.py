@@ -21,6 +21,13 @@ class Settings(BaseSettings):
     max_image_bytes: int = Field(default=8_388_608, ge=65_536, le=33_554_432)
     bundles_dir: Path | None = None
     default_template: str = "demo/card"
+    s3_endpoint: str = ""
+    s3_region: str = ""
+    s3_bucket: str = ""
+    s3_access_key: str = ""
+    s3_secret_key: str = ""
+    public_files_url: str = ""
+    storage_ttl_hours: int = Field(default=24, ge=1, le=8760)
 
     @field_validator("tenants_file", "bundles_dir", mode="before")
     @classmethod
