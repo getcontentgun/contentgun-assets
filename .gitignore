@@ -10,3 +10,4 @@ __pycache__/
 HANDOVER.md
 PLAN.md
 /tenants.toml
+/spikes/
