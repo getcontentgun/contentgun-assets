@@ -122,13 +122,13 @@ def _decode(raw: str, field: str, limit: int, kind: str) -> bytes:
     return data
 
 
-def image_data_uri(data: bytes) -> str:
+def image_data_uri(data: bytes, subject: str = "Field 'image'", other: str = "icon") -> str:
     """The image as a data URI, re-encoded from the bytes that were checked, so the page can only
     ever receive what passed validation."""
     mime = _sniff(data)
     if mime is None:
-        hint = " Send an SVG as 'icon'." if _looks_like_markup(data) else ""
-        raise ApiError(400, f"Field 'image' must be a {ACCEPTED} image.{hint}")
+        hint = f" Send an SVG as {other!r}." if _looks_like_markup(data) else ""
+        raise ApiError(400, f"{subject} must be a {ACCEPTED} image.{hint}")
     return _data_uri(mime, data)
 
 
@@ -165,9 +165,9 @@ def _check_svg(root: ElementTree.Element, subject: str) -> None:
             raise ApiError(400, f"{subject} must not contain text. Convert it to paths first.")
 
 
-def icon_data_uri(data: bytes, subject: str = "Field 'icon'") -> str:
+def icon_data_uri(data: bytes, subject: str = "Field 'icon'", other: str = "image") -> str:
     if _sniff(data) is not None:
-        raise ApiError(400, f"{subject} must be an SVG document. Send a {ACCEPTED} as 'image'.")
+        raise ApiError(400, f"{subject} must be an SVG document. Send a {ACCEPTED} as {other!r}.")
 
     # The stdlib parser is safe here because verify_xml_parser() refuses an expat that
     # still expands entities without limit, and the size cap bounds everything else.

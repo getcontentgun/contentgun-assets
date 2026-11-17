@@ -21,6 +21,8 @@ and every request sees only the bundles of its tenant and the built-in ones, see
 [tenants/README.md](tenants/README.md). Templates come from template bundles, described in
 [bundles/README.md](bundles/README.md), and are addressed as `<bundle>/<template>`. Results as
 URLs, uploads and bundles from a bucket need storage, see [storage/README.md](storage/README.md).
+An image or icon comes as base64 in the body, as an upload, or as an `https` URL that the service
+fetches itself, see [render.md](render.md#images-and-icons-from-a-url).
 Running the service in a container is described in [docker.md](docker.md). The local MCP server for
 the Claude desktop app, a client of this API, is documented in [mcp/README.md](mcp/README.md).
 

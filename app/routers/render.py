@@ -5,6 +5,7 @@ from fastapi.responses import JSONResponse
 
 from app.auth import CurrentTenant
 from app.errors import ApiError
+from app.fetching import RemoteImages
 from app.files import Files, storage_missing, timestamp
 from app.formats import dimensions, filename_token
 from app.images import data_uri_size
@@ -33,11 +34,12 @@ async def render(request: Request, payload: RenderRequest, tenant: CurrentTenant
     registry = tenant.registry
     pool = request.app.state.browser
     files: Files | None = request.app.state.files
+    remote: RemoteImages = request.app.state.remote
 
     if payload.output == "url" and files is None:
         raise storage_missing("output 'url'")
     uploads = None if files is None else files.uploads_of(tenant.name)
-    card = await resolve_render(registry, payload, uploads)
+    card = await resolve_render(registry, payload, uploads, remote.fetch)
 
     # After validation on purpose: a malformed request deserves its 400 even while the
     # browser is down.

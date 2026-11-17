@@ -5,6 +5,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.formats import Format
 
 MAX_FIELD_LENGTH = 200
+MAX_URL_LENGTH = 2048
 
 Output = Literal["binary", "url"]
 
@@ -32,11 +33,23 @@ class RenderRequest(BaseModel):
     icon_color: Literal["accent", "text"] | None = None
     image_upload: str | None = Field(default=None, max_length=64)
     icon_upload: str | None = Field(default=None, max_length=64)
+    image_url: str | None = Field(default=None, max_length=MAX_URL_LENGTH)
+    icon_url: str | None = Field(default=None, max_length=MAX_URL_LENGTH)
     output: Output | None = None
 
 
 RESERVED_KEYS = frozenset(
-    {"template", "format", "image", "icon", "image_upload", "icon_upload", "output"}
+    {
+        "template",
+        "format",
+        "image",
+        "icon",
+        "image_upload",
+        "icon_upload",
+        "image_url",
+        "icon_url",
+        "output",
+    }
 )
 
 MAX_DOCUMENT_SLIDES = 20

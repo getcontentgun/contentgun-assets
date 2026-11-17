@@ -28,6 +28,8 @@ says where, see [Output as a URL](#output-as-a-url).
 | `icon_color` | string | no | The color of the icon: `accent`, the amber `#f2b33d` and the default, or `text`, the off-white text color `#f3efe6`. Anything else is a `400`. Without an icon it has no effect. Declared by `demo/carousel-content` |
 | `image_upload` | string | no | The id of an uploaded image, in place of `image`, see [Uploads](#uploads). Needs storage |
 | `icon_upload` | string | no | The id of an uploaded SVG icon, in place of `icon`. Needs storage |
+| `image_url` | string | no | An `https` URL of the image, in place of `image`, up to 2048 characters. The service fetches it itself, see [Images and icons from a URL](#images-and-icons-from-a-url) |
+| `icon_url` | string | no | An `https` URL of the SVG icon, in place of `icon`, fetched the same way |
 | `output` | string | no | `binary`, the default, answers with the PNG; `url` stores it and answers with JSON, see [Output as a URL](#output-as-a-url). Needs storage |
 
 A template of another bundle may declare fields of its own: `GET /v1/templates` lists them, and
@@ -44,6 +46,11 @@ is empty or `null`; so is a field that is not a string.
 than a silently ignored field, and `GET /v1/templates` reports the capabilities as
 `accepts_image` and `accepts_icon`. A request carries an image or an icon, never both: both is a
 `400`, and an empty string counts as not sent.
+
+Each of them comes from one of three sources: base64 in the body (`image`, `icon`), an
+[upload](#uploads) (`image_upload`, `icon_upload`) or a [URL](#images-and-icons-from-a-url)
+(`image_url`, `icon_url`). Two sources for the same graphic are a `400`, and so is an image from
+any source next to an icon from any source.
 
 `demo/card-image` places the image full-bleed, cropped to the format with `object-fit: cover`,
 under a slate gradient that darkens towards the bottom, where its text sits. The gradient is part
@@ -66,10 +73,37 @@ plain `PUT`, and the request names it by its id, as described in [Uploads](uploa
 { "template": "demo/card-image", "headline": "Hallo", "image_upload": "up_Q2x8m0Wq1cR7nJb3TzVkLa5e" }
 ```
 
-- **One source per graphic.** `image` and `image_upload` together are a `400`, and so are `icon` and `icon_upload`. An image from either source next to an icon from either source is a `400` as well.
 - **An upload is used as what it is.** An uploaded PNG, JPEG or WebP goes into `image_upload`, an uploaded SVG into `icon_upload`; the other way round is a `400` that names the right one.
 - **An upload belongs to its tenant** and lives for `STORAGE_TTL_HOURS`, 24 hours by default. An id of another tenant, an expired one and one that never existed are all `400` "Unknown upload".
 - An upload goes through the same checks as an `image` or `icon` in the body, when it arrives and again when it is used, so a card can only carry what passed them.
+
+### Images and icons from a URL
+
+With `image_url` or `icon_url` the service fetches the file itself, so the caller does not have
+to download and encode it first. It needs no storage:
+
+```json
+{ "template": "demo/card-image", "headline": "Hallo", "image_url": "https://images.example/photo.jpg" }
+```
+
+A URL makes the service connect somewhere on the caller's behalf, from inside the network it runs
+in. So every URL has to pass these rules:
+
+| Rule | Otherwise |
+|------|-----------|
+| `https` only, on port 443, with no user name or password in the URL | `400` |
+| Every address the host name resolves to must be globally reachable. Refused are the private, loopback, link-local, carrier-grade NAT, documentation, benchmarking, reserved and multicast ranges of IPv4 and IPv6, every IPv6 address that carries an IPv4 address (IPv4-mapped, IPv4-compatible, 6to4, Teredo, NAT64), and the metadata addresses of the cloud providers, such as `169.254.169.254`, `fd00:ec2::254`, `100.100.100.200`, `192.0.0.192` and `168.63.129.16`. One such address among public ones refuses the URL | `400` |
+| At most three redirects. Every target meets the same rules, with a lookup of its own | `400` for a target against the rules, `502` for a fourth redirect |
+| 10 seconds for the whole fetch, redirects and body included | `502` |
+| The last answer is a `200` | `502` |
+| At most `MAX_IMAGE_BYTES` (8 MB by default) for an image and 256 KB for an icon, counted as the body arrives, whatever `Content-Length` says | `413` |
+| The bytes are a PNG, JPEG or WebP image, or an SVG that meets the [SVG rules](#image-or-icon-on-a-content-slide). The `Content-Type` the other side sends does not count | `400` |
+
+- **The connection goes to the address that was checked.** The service resolves the host name once per hop, checks every address and connects to the first one, with the host name in the `Host` header and in TLS, so the certificate is still checked against the name. A DNS answer that changes a moment later cannot send the request elsewhere. Proxy settings of the environment are ignored.
+- **The errors give nothing away.** A URL against the rules is a `400` "The image URL points to an address that is not allowed.", a fetch that fails for any reason, from an unknown host to a `404`, is a `502` "The image URL could not be fetched."; for an icon both say "icon URL". Neither names an address the host resolved to.
+- **The template is checked first.** A URL for a template without the capability is a `400` before anything is resolved.
+- **Nothing is kept.** The file is fetched for this one request and checked and embedded like base64 in the body; there is no cache. The log line of the fetch names its kind, size and redirects, never the URL, which often carries a token.
+- The service asks for the file uncompressed, with `Accept` naming the formats it takes, so an image CDN that picks the format by that header does not answer with AVIF.
 
 ### Output as a URL
 
@@ -138,15 +172,17 @@ roughly 40 to 60 characters each, read well.
 |--------|------|-------------|
 | `200` | PNG bytes | `Content-Type: image/png`, plus `Content-Disposition: inline; filename="<bundle>-<template>_<format>_<id>.png"`, for example `demo-card_4x5_<id>.png`, and `Cache-Control: no-store` |
 | `200` | JSON | With `"output": "url"`: where the PNG is stored, see [Output as a URL](#output-as-a-url) |
-| `400` | `{"ok": false, "error": "..."}` | Invalid JSON, failed validation, unknown template, unsupported format, field the template does not accept, field that is not a string, field over the template's own limit, an image or icon the template does not take, an image and an icon together, a graphic from two sources, an image that is no PNG, JPEG or WebP, an icon that breaks one of the [SVG rules](#image-or-icon-on-a-content-slide), an unknown upload or one of the other kind |
+| `400` | `{"ok": false, "error": "..."}` | Invalid JSON, failed validation, unknown template, unsupported format, field the template does not accept, field that is not a string, field over the template's own limit, an image or icon the template does not take, an image and an icon together, a graphic from two sources, an image that is no PNG, JPEG or WebP, an icon that breaks one of the [SVG rules](#image-or-icon-on-a-content-slide), an unknown upload or one of the other kind, a URL against the [rules for URLs](#images-and-icons-from-a-url) |
 | `401` | `{"ok": false, "error": "Unauthorized."}` | Missing or wrong key |
-| `413` | `{"ok": false, "error": "..."}` | The decoded `image` exceeds `MAX_IMAGE_BYTES`, or the decoded `icon` exceeds 256 KB |
+| `413` | `{"ok": false, "error": "..."}` | The decoded `image` or the file at `image_url` exceeds `MAX_IMAGE_BYTES`, or the decoded `icon` or the file at `icon_url` exceeds 256 KB |
 | `500` | `{"ok": false, "error": "..."}` | Render failure, or a font of the template's bundle that did not load while `STRICT_FONTS` is on |
 | `501` | `{"ok": false, "error": "Storage is not configured on this server, so … cannot be used."}` | `"output": "url"`, `image_upload` or `icon_upload` without storage |
+| `502` | `{"ok": false, "error": "The image URL could not be fetched."}` | The file at `image_url` or `icon_url` could not be fetched: unknown host, no connection, a certificate that does not match, no `200`, more than three redirects or more than 10 seconds |
 | `503` | `{"ok": false, "error": "..."}` | The browser is not available, the service is shutting down, all render slots were occupied longer than `QUEUE_TIMEOUT_MS`, or the bucket did not answer |
 | `504` | `{"ok": false, "error": "Render timed out."}` | The render exceeded `RENDER_TIMEOUT_MS` |
 
-A `503` is worth retrying; a `400` never is.
+A `503` is worth retrying, and so is a `502` when the other side may have been down; a `400` never
+is.
 
 ## Example (curl)
 
@@ -291,6 +327,9 @@ The names are the ones on icons.getbootstrap.com, such as `lightbulb`, `graph-up
 `people`. An unknown name is a `404` from jsDelivr before the service is involved, so the flow
 can drop the icon for that slide instead of failing the whole post.
 
+The service can also fetch the icon itself: `"icon_url": "https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.2/icons/{{ $json.icon_name }}.svg"`
+saves the extra node, and an unknown name is then a `502` from the render call.
+
 ### In n8n
 
 1. A **Code** node in **Run Once for All Items** mode turns the post into one item per slide, in slide order. Each item's JSON is the complete request body of its slide, `template` and `format` included, and nothing else: a key the slide's template does not declare is a `400`, even when it is empty or `null`. The pagination comes from the position in the slide list, as below. `$itemIndex` does not work for it: n8n does not offer it in the Code node, and in this mode every slide would get the same index.
@@ -405,7 +444,7 @@ Re-measure both formats, with and without a graphic, after changing a box, a siz
 - **Hyphenation happens in the service, not in the browser.** Chromium's own `hyphens: auto` needs dictionaries that the Linux headless shell does not ship, so a card would break differently in development and in production. The soft hyphens the service inserts are invisible unless a line actually breaks there.
 - **The handle is whatever the request sends.** Nothing fills it in, so a flow that forgets it gets a card without one instead of a wrong account. Keep it in the flow's configuration next to the target account.
 - **`$binary.<name>.data` is only base64 while n8n keeps binaries in memory.** With filesystem binary storage the property holds a reference instead, and the flow needs a node that converts the binary to base64 before the render call.
-- **An image or icon in the body travels in the request and nowhere else.** Nothing is written to disk, and the service keeps no image or icon directory. Only an upload and a result with `"output": "url"` are stored, in the bucket, for `STORAGE_TTL_HOURS`.
+- **An image or icon in the body or from a URL lives in the request and nowhere else.** Nothing is written to disk, and the service keeps no image or icon directory. Only an upload and a result with `"output": "url"` are stored, in the bucket, for `STORAGE_TTL_HOURS`.
 - **Emoji are not supported.** They would render differently on macOS and Linux and are not part of the shipped font subsets.
 - The fonts of the template's bundle are embedded in the page as data URIs and the screenshot waits for them to load, so a card never renders in a fallback font. With `STRICT_FONTS=true` a font that fails to load is a `500` rather than a wrong-looking image.
 - Every text field is HTML-escaped. Markup in the request text appears as literal characters.

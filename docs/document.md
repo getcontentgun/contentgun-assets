@@ -26,9 +26,10 @@ every page of a PDF as a slide. The response body is the PDF itself, not JSON, o
 | `output` | string | no | `binary`, the default, answers with the PDF; `url` stores it and answers with JSON like [a render](render.md#output-as-a-url), with `pages` added. Needs [storage](storage/README.md). It belongs to the document: on a slide it is a `400` |
 
 - **Every slide uses the same format.** A slide without `format` counts as its template's first format. Mixed formats are a `400`, because a PDF has one page size and LinkedIn shows a document in one aspect ratio.
-- **Images and icons share one budget.** A slide carries an `image` or an `icon` like its render request does, or an `image_upload` or `icon_upload`, and all of them in a document together may be at most `MAX_IMAGE_BYTES` (8 MB by default) after decoding, or the whole request is a `413`, before any slide is decoded. Uploads count with their stored size, read before any of them is fetched. Fallback images do not count, so `demo/card-image` without an image still works and uses its own.
+- **Images and icons share one budget.** A slide carries an `image` or an `icon` like its render request does, or an `image_upload`, `icon_upload`, `image_url` or `icon_url`, and all of them in a document together may be at most `MAX_IMAGE_BYTES` (8 MB by default) after decoding, or the whole request is a `413`, before any slide is decoded. Uploads count with their stored size, read before any of them is fetched. URLs are fetched last, with what base64 and uploads left of the budget, and count the bytes as they arrive, once for every slide that uses the URL: once they bring in more, every fetch of the document stops and the request is a `413`. Fallback images do not count, so `demo/card-image` without an image still works and uses its own.
+- **URLs are fetched at the same time, at most four at once, and each URL once.** Several slides with the same `image_url` cost one fetch, yet each of them counts on the budget, as with base64 and uploads, because each of them carries the file. Every slide is checked before the first fetch starts, so a slide that cannot render costs none. The rules for a URL are those of [a render](render.md#images-and-icons-from-a-url).
 - **No other top-level keys.** Anything next to `slides` and `output` is a `400`.
-- **Errors name the slide.** A field that fails validation is reported with its position counted from 0, as in `slides.2.headline: String should have at most 140 characters.`. An error from the template, such as an unknown template or a field it does not declare, is counted from 1, as in `Slide 3: Field 'cta' is not accepted by template 'demo/carousel-content'. …`.
+- **Errors name the slide.** A field that fails validation is reported with its position counted from 0, as in `slides.2.headline: String should have at most 140 characters.`. An error from the template, such as an unknown template or a field it does not declare, is counted from 1, as in `Slide 3: Field 'cta' is not accepted by template 'demo/carousel-content'. …`. A URL that fails names the first slide that carries it, as in `Slide 2: The image URL could not be fetched.`.
 
 Every slide is validated before the first one is rendered, so a broken request gets its `400`
 without costing render time, even while the browser is down.
@@ -51,11 +52,12 @@ therefore takes about as long as ten PNGs.
 |--------|------|-------------|
 | `200` | PDF bytes | `Content-Type: application/pdf`, plus `Content-Disposition: inline; filename="document_<format>_<id>.pdf"`, for example `document_4x5_<id>.pdf`, and `Cache-Control: no-store` |
 | `200` | JSON | With `"output": "url"`: `url`, `content_type`, `width` and `height` of the format in px, `bytes`, `expires_at` and `pages` |
-| `400` | `{"ok": false, "error": "..."}` | Invalid JSON, a slide that fails validation, mixed formats, a key next to `slides` and `output`, `output` on a slide, an unknown upload on a slide |
+| `400` | `{"ok": false, "error": "..."}` | Invalid JSON, a slide that fails validation, mixed formats, a key next to `slides` and `output`, `output` on a slide, an unknown upload on a slide, a URL against the [rules for URLs](render.md#images-and-icons-from-a-url) |
 | `401` | `{"ok": false, "error": "Unauthorized."}` | Missing or wrong key |
 | `413` | `{"ok": false, "error": "..."}` | The images and icons of all slides together exceed `MAX_IMAGE_BYTES`, or one icon exceeds 256 KB, reported with its slide |
 | `500` | `{"ok": false, "error": "..."}` | Render failure, or a font of a slide's bundle that did not load while `STRICT_FONTS` is on |
 | `501` | `{"ok": false, "error": "..."}` | `"output": "url"` or an upload on a slide without storage |
+| `502` | `{"ok": false, "error": "Slide 2: The image URL could not be fetched."}` | The file at a URL of a slide could not be fetched |
 | `503` | `{"ok": false, "error": "..."}` | The browser is not available, the service is shutting down, a render slot stayed occupied longer than `QUEUE_TIMEOUT_MS`, or the bucket did not answer |
 | `504` | `{"ok": false, "error": "Render timed out."}` | A slide exceeded `RENDER_TIMEOUT_MS` |
 

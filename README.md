@@ -17,8 +17,8 @@ its own, which live outside the repository in its folder under `BUNDLES_DIR`. A 
 one tenant, whose keys are `API_KEYS`; several tenants come from a tenants file, see
 [docs/tenants/README.md](docs/tenants/README.md).
 
-Without storage nothing is stored: a request image or icon lives in the request only, the PNG or
-PDF in the response. With an S3-compatible bucket the service also hands out results as URLs,
+Without storage nothing is stored: an image or icon, sent in the request or fetched by the service
+from an `https` URL, lives in the request only, the PNG or PDF in the response. With an S3-compatible bucket the service also hands out results as URLs,
 takes uploads through signed URLs and reads the bundles of the tenants from the bucket, see
 [docs/storage/README.md](docs/storage/README.md).
 
@@ -167,7 +167,7 @@ holds the architecture and the pitfalls of the rendering.
 | `RENDER_CONCURRENCY` | `2` | Parallel browser pages |
 | `RENDER_TIMEOUT_MS` | `15000` | Per-render budget, then `504` |
 | `QUEUE_TIMEOUT_MS` | `10000` | Wait for a free slot, then `503` |
-| `MAX_IMAGE_BYTES` | `8388608` | Largest decoded image a request may carry, and the budget of all images and icons of a document together, then `413`. An icon is capped at 256 KB below that |
+| `MAX_IMAGE_BYTES` | `8388608` | Largest image a request may carry, decoded or fetched from a URL, and the budget of all images and icons of a document together, then `413`. An icon is capped at 256 KB below that |
 | `BUNDLES_DIR` | empty | The folder with one subfolder per tenant, holding the bundles of that tenant. Empty means the built-in bundles only. A relative path counts from the repository root |
 | `DEFAULT_TEMPLATE` | `demo/card` | The template id used when the request omits `template`, for every tenant without a `default_template` of its own |
 | `S3_ENDPOINT`, `S3_REGION`, `S3_BUCKET`, `S3_ACCESS_KEY`, `S3_SECRET_KEY` | empty | The bucket for results, uploads and the bundles of the tenants, see [docs/storage/README.md](docs/storage/README.md). All of them with `PUBLIC_FILES_URL`, or none |

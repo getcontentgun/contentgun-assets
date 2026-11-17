@@ -1,9 +1,11 @@
 import logging
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
+from typing import Literal
 
 from app.browser import FontNotLoaded, RenderBusy, RenderTimeout, RenderUnavailable
 from app.errors import ApiError
+from app.fetching import checked_url, url_subject
 from app.files import Kind, TenantUploads, storage_missing
 from app.formats import Format, dimensions
 from app.images import decode_icon, decode_image, file_data_uri, icon_data_uri, image_data_uri
@@ -11,6 +13,8 @@ from app.schemas import MAX_FIELD_LENGTH, RESERVED_KEYS, RenderRequest
 from app.templating import TemplateRegistry, TemplateSpec, UnknownTemplateError
 
 logger = logging.getLogger(__name__)
+
+Fetch = Callable[[str, Kind], Awaitable[bytes]]
 
 
 @dataclass(frozen=True)
@@ -20,6 +24,27 @@ class ResolvedRender:
     fields: dict[str, str]
     image: str | None
     icon: str | None
+
+
+@dataclass(frozen=True)
+class Pending:
+    """The image or the icon of a request whose bytes are still to be read: an upload or a URL."""
+
+    kind: Kind
+    source: Literal["upload", "url"]
+    value: str
+
+
+@dataclass(frozen=True)
+class CheckedRender:
+    """A request that passed every check that needs neither the bucket nor the network."""
+
+    spec: TemplateSpec
+    format: Format
+    fields: dict[str, str]
+    image: str | None
+    icon: str | None
+    pending: Pending | None
 
 
 def resolve_template(registry: TemplateRegistry, template_id: str | None) -> TemplateSpec:
@@ -51,8 +76,16 @@ def _given(raw: str | None) -> bool:
     return raw is not None and bool(raw.strip())
 
 
-def _either(inline: str | None, upload: str | None) -> str | None:
-    return inline if _given(inline) else upload
+def _sources(kind: Kind) -> tuple[str, str, str]:
+    return kind, f"{kind}_upload", f"{kind}_url"
+
+
+def _source(payload: RenderRequest, kind: Kind) -> str | None:
+    for name in _sources(kind):
+        value = getattr(payload, name)
+        if _given(value):
+            return value
+    return None
 
 
 def reject_image_and_icon(image: str | None, icon: str | None) -> None:
@@ -60,9 +93,25 @@ def reject_image_and_icon(image: str | None, icon: str | None) -> None:
         raise ApiError(400, "Send either an image or an icon, not both.")
 
 
-def reject_two_sources(inline: str | None, upload: str | None, kind: Kind) -> None:
-    if _given(inline) and _given(upload):
-        raise ApiError(400, f"Send the {kind} either as {kind} or as {kind}_upload, not both.")
+def reject_two_sources(payload: RenderRequest, kind: Kind) -> None:
+    if sum(_given(getattr(payload, name)) for name in _sources(kind)) > 1:
+        inline, upload, url = _sources(kind)
+        raise ApiError(400, f"Send the {kind} in one field only: {inline}, {upload} or {url}.")
+
+
+def _accept(spec: TemplateSpec, kind: Kind) -> None:
+    accepts = spec.accepts_image if kind == "image" else spec.accepts_icon
+    if not accepts:
+        raise ApiError(400, f"Template {spec.id!r} does not accept an {kind}.")
+
+
+def _pending(payload: RenderRequest, kind: Kind) -> Pending | None:
+    _, upload, url = _sources(kind)
+    if _given(getattr(payload, upload)):
+        return Pending(kind, "upload", getattr(payload, upload).strip())
+    if _given(getattr(payload, url)):
+        return Pending(kind, "url", getattr(payload, url).strip())
+    return None
 
 
 def _uploads(uploads: TenantUploads | None, kind: Kind) -> TenantUploads:
@@ -71,15 +120,19 @@ def _uploads(uploads: TenantUploads | None, kind: Kind) -> TenantUploads:
     return uploads
 
 
-async def resolve_upload(
-    spec: TemplateSpec, upload_id: str, kind: Kind, uploads: TenantUploads | None
-) -> str:
+async def resolve_upload(upload_id: str, kind: Kind, uploads: TenantUploads | None) -> str:
     """An upload of the tenant as the data URI of the template's image or icon."""
-    accepts = spec.accepts_image if kind == "image" else spec.accepts_icon
-    if not accepts:
-        raise ApiError(400, f"Template {spec.id!r} does not accept an {kind}.")
-    data = await _uploads(uploads, kind).read(upload_id.strip(), kind)
+    data = await _uploads(uploads, kind).read(upload_id, kind)
     return image_data_uri(data) if kind == "image" else icon_data_uri(data)
+
+
+async def resolve_url(url: str, kind: Kind, fetch: Fetch) -> str:
+    """The file behind a URL as the data URI of the template's image or icon, checked like an
+    image or icon in the body, whatever type the other side claims for it."""
+    data = await fetch(url, kind)
+    if kind == "image":
+        return image_data_uri(data, url_subject(kind), "icon_url")
+    return icon_data_uri(data, url_subject(kind), "image_url")
 
 
 async def upload_size(payload: RenderRequest, uploads: TenantUploads | None) -> int:
@@ -139,9 +192,9 @@ def resolve_fields(spec: TemplateSpec, requested: dict[str, object]) -> dict[str
     return fields
 
 
-async def resolve_render(
-    registry: TemplateRegistry, payload: RenderRequest, uploads: TenantUploads | None = None
-) -> ResolvedRender:
+def check_render(registry: TemplateRegistry, payload: RenderRequest) -> CheckedRender:
+    """Everything of a request that can be checked before an upload is read or a URL fetched,
+    so a request that cannot render never costs a fetch."""
     spec = resolve_template(registry, payload.template)
     fmt = resolve_format(spec, payload.format)
     # exclude_unset, not a plain dump: the typed optional fields would otherwise arrive as None
@@ -152,20 +205,48 @@ async def resolve_render(
         if key not in RESERVED_KEYS
     }
     fields = resolve_fields(spec, requested)
-    reject_two_sources(payload.image, payload.image_upload, "image")
-    reject_two_sources(payload.icon, payload.icon_upload, "icon")
-    reject_image_and_icon(
-        _either(payload.image, payload.image_upload), _either(payload.icon, payload.icon_upload)
+    reject_two_sources(payload, "image")
+    reject_two_sources(payload, "icon")
+    reject_image_and_icon(_source(payload, "image"), _source(payload, "icon"))
+    pending = _pending(payload, "image") or _pending(payload, "icon")
+    if pending is not None:
+        _accept(spec, pending.kind)
+        if pending.source == "url":
+            checked_url(pending.value, pending.kind)
+    pending_kind = None if pending is None else pending.kind
+    image = None if pending_kind == "image" else resolve_image(spec, payload.image)
+    icon = None if pending_kind == "icon" else resolve_icon(spec, payload.icon)
+    return CheckedRender(
+        spec=spec, format=fmt, fields=fields, image=image, icon=icon, pending=pending
     )
-    if _given(payload.image_upload):
-        image = await resolve_upload(spec, payload.image_upload, "image", uploads)
-    else:
-        image = resolve_image(spec, payload.image)
-    if _given(payload.icon_upload):
-        icon = await resolve_upload(spec, payload.icon_upload, "icon", uploads)
-    else:
-        icon = resolve_icon(spec, payload.icon)
-    return ResolvedRender(spec=spec, format=fmt, fields=fields, image=image, icon=icon)
+
+
+async def finish_render(
+    card: CheckedRender, uploads: TenantUploads | None, fetch: Fetch
+) -> ResolvedRender:
+    image, icon = card.image, card.icon
+    pending = card.pending
+    if pending is not None:
+        if pending.source == "upload":
+            uri = await resolve_upload(pending.value, pending.kind, uploads)
+        else:
+            uri = await resolve_url(pending.value, pending.kind, fetch)
+        if pending.kind == "image":
+            image = uri
+        else:
+            icon = uri
+    return ResolvedRender(
+        spec=card.spec, format=card.format, fields=card.fields, image=image, icon=icon
+    )
+
+
+async def resolve_render(
+    registry: TemplateRegistry,
+    payload: RenderRequest,
+    uploads: TenantUploads | None,
+    fetch: Fetch,
+) -> ResolvedRender:
+    return await finish_render(check_render(registry, payload), uploads, fetch)
 
 
 async def capture(

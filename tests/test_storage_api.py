@@ -181,8 +181,8 @@ async def test_an_image_comes_from_one_source(storage_client):
         storage_client, template=CARD_IMAGE, image=image_base64(), image_upload=upload_id
     )
     assert response.status_code == 400
-    assert (
-        response.json()["error"] == "Send the image either as image or as image_upload, not both."
+    assert response.json()["error"] == (
+        "Send the image in one field only: image, image_upload or image_url."
     )
 
 

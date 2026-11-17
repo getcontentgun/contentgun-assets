@@ -18,8 +18,8 @@ variant, so most of the time there is no URL to type.
 |-----------------|---------|-------------|
 | `tenant` | the only tenant, when there is just one | Whose templates to preview. With several tenants it is required, see [Tenants](tenants/README.md) |
 | `template`, `format` | as in render, the tenant's default template included | `template` takes a template id, `<bundle>/<template>`, of a template the tenant can use |
-| `image_url` | the template's fallback image | Image for a template that accepts one, as a URL. Ignored by templates without the capability |
-| `icon_url` | none | SVG icon for a template that accepts one, as a URL, for example from jsDelivr. Ignored by templates without the capability. Together with `image_url` it is a `400`, as on the render route |
+| `image_url` | the template's fallback image | Image for a template that accepts one, as a URL that the browser loads. Ignored by templates without the capability |
+| `icon_url` | none | SVG icon for a template that accepts one, as a URL that the browser loads, for example from jsDelivr. Ignored by templates without the capability. Together with `image_url` it is a `400`, as on the render route |
 | `fit` | `1` | `0` disables the fit-text script, so the CSS font sizes apply unchanged |
 | any field the template declares | the field's value in the `[samples]` table of the template's `template.toml`, else its default | The same limits as in the render request: `headline` 1 to 140 characters, `handle` and `topic` up to 60, `pagination` up to 16, every other field up to 200, and whatever tighter limits the template sets in `[limits]`. Empty removes an optional element |
 
@@ -65,7 +65,7 @@ open "http://127.0.0.1:8010/v1/debug/html?template=demo/card-image&image_url=htt
 
 - The HTML comes from the same code path as the screenshot, so what the browser shows and what Chromium captures cannot drift apart.
 - **The defaults are preview content, not API defaults.** `[samples]` exists for this route only: `GET /v1/templates` does not report it, and the render endpoint never falls back to it. `template.toml` is read at startup, so a changed sample needs a restart, which `bin/development` does on its own when a `.toml` file changes.
-- **The render endpoint takes the image and the icon as base64, this route takes URLs.** A base64 blob cannot be typed into a query string, and only the designer's own browser fetches the URL: the debug route returns HTML and never involves the service's Chromium. Without `image_url` the page falls back to the template's own image, exactly as the screenshot does. An `icon_url` skips the SVG checks of the render endpoint, so an icon that previews fine can still be refused there.
+- **Here the designer's browser loads `image_url` and `icon_url`, not the service.** The render endpoint takes parameters of the same names but fetches the file itself, under [the rules for URLs](render.md#images-and-icons-from-a-url): `https` only, and never an address of the network the service runs in. This route returns HTML and never involves the service's Chromium or its fetching, so it takes any URL the browser can load, a local `http://127.0.0.1:8020/photo.jpg` included, which the render endpoint refuses. Without `image_url` the page falls back to the template's own image, exactly as the screenshot does. An `icon_url` skips the SVG checks of the render endpoint, so an icon that previews fine can still be refused there.
 - `template.css` is read from disk on every request, so a CSS edit needs only a browser reload, not a service restart. Edits to the `.j2` files, those under a bundle's `_base/` included, are picked up the same way, through Jinja's auto-reload.
 - The page is about 250KB because the fonts are embedded as data URIs. That is expected.
 - Never enable this route on a publicly reachable deployment. It renders arbitrary text without a key.

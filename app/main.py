@@ -7,6 +7,7 @@ from app import __version__
 from app.browser import BrowserPool
 from app.config import settings
 from app.errors import register_exception_handlers
+from app.fetching import RemoteImages
 from app.files import Files, configured_files
 from app.images import verify_xml_parser
 from app.reloading import Reloader, service_reloader
@@ -47,9 +48,14 @@ async def lifespan(app: FastAPI):
         app.state.reloader.close()
 
 
-def create_app(tenants: TenantDirectory | None = None, files: Files | None = None) -> FastAPI:
+def create_app(
+    tenants: TenantDirectory | None = None,
+    files: Files | None = None,
+    remote: RemoteImages | None = None,
+) -> FastAPI:
     """The service. Without tenants, they come from the settings, and with storage and no
-    BUNDLES_DIR their bundles come from the bucket; without files, the storage of the settings."""
+    BUNDLES_DIR their bundles come from the bucket; without files, the storage of the settings;
+    without remote, images and icons are fetched from the network through the system resolver."""
     configure_logging()
     verify_xml_parser()
 
@@ -73,6 +79,7 @@ def create_app(tenants: TenantDirectory | None = None, files: Files | None = Non
     )
     app.state.tenants = tenants
     app.state.files = files
+    app.state.remote = remote if remote is not None else RemoteImages()
     app.state.reloader = reloader
     app.state.browser = None
 
