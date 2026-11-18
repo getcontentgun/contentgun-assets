@@ -24,12 +24,17 @@ MCP_DIR = Path(__file__).resolve().parents[1] / "mcp"
 LOCAL_ONLY = {"paths", "tools", "server", "config", "__main__"}
 REMOTE = {
     "accounts",
+    "cards",
+    "client",
+    "errors",
     "login",
     "login_pages",
     "mailer",
     "oauth",
+    "preview",
     "remote_config",
     "remote_server",
+    "remote_tools",
     "signing",
     "version",
 }
@@ -63,7 +68,13 @@ async def test_the_older_protocol_of_the_connector_check_works_without_a_session
         result = await tool(remote.client, token, "whoami", protocol=LEGACY)
     assert opened.status_code == 200
     assert "mcp-session-id" not in opened.headers
-    assert [entry["name"] for entry in listed.json()["result"]["tools"]] == ["whoami"]
+    assert [entry["name"] for entry in listed.json()["result"]["tools"]] == [
+        "whoami",
+        "list_templates",
+        "create_upload",
+        "render_card",
+        "render_carousel",
+    ]
     assert result["structuredContent"]["email"] == ADDRESS
 
 

@@ -172,3 +172,113 @@ async def test_a_timeout_names_the_limit():
         raise httpx.ReadTimeout("slow", request=request)
 
     assert await failure(handler) == f"{BASE_URL} did not answer within 5 seconds."
+
+
+STORED_ANSWER = {
+    "ok": True,
+    "url": "https://files.test/o/acme/" + "A" * 32 + "/demo-card_4x5_1a2b3c4d.png",
+    "content_type": "image/png",
+    "width": 1080,
+    "height": 1350,
+    "bytes": 1234,
+    "expires_at": "2026-11-19T12:00:00Z",
+}
+
+
+async def test_a_client_for_a_tenant_names_it_and_leaves_the_original_alone():
+    seen = []
+
+    def handler(request):
+        seen.append(request.headers.get("x-contentgun-tenant"))
+        return httpx.Response(200, json={"ok": True, "templates": TEMPLATES})
+
+    client = client_for(handler)
+    await client.for_tenant("acme").list_templates()
+    await client.list_templates()
+    assert seen == ["acme", None]
+
+
+async def test_a_stored_render_asks_for_a_url_and_reads_the_answer():
+    sent = []
+
+    def handler(request):
+        sent.append(json.loads(request.content))
+        return httpx.Response(200, json=STORED_ANSWER, headers={"x-request-id": "r-1"})
+
+    stored = await client_for(handler).render_stored({"headline": "Hallo"})
+    assert sent == [{"headline": "Hallo", "output": "url"}]
+    assert (stored.url, stored.width, stored.height, stored.size) == (
+        STORED_ANSWER["url"],
+        1080,
+        1350,
+        1234,
+    )
+    assert (stored.expires_at, stored.request_id, stored.pages) == (
+        "2026-11-19T12:00:00Z",
+        "r-1",
+        None,
+    )
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        {key: value for key, value in STORED_ANSWER.items() if key != "width"},
+        STORED_ANSWER | {"width": "1080"},
+        STORED_ANSWER | {"bytes": True},
+    ],
+)
+async def test_a_stored_render_with_a_malformed_answer_is_unexpected(answer):
+    client = client_for(lambda request: httpx.Response(200, json=answer))
+    with pytest.raises(AssetsApiError, match="Unexpected response from http://assets.test"):
+        await client.render_stored({"headline": "Hallo"})
+
+
+async def test_a_stored_document_must_name_its_pages():
+    with_pages = client_for(lambda request: httpx.Response(200, json=STORED_ANSWER | {"pages": 3}))
+    assert (await with_pages.document_stored([{"headline": "Hallo"}])).pages == 3
+    without = client_for(lambda request: httpx.Response(200, json=STORED_ANSWER))
+    with pytest.raises(AssetsApiError, match="Unexpected response"):
+        await without.document_stored([{"headline": "Hallo"}])
+
+
+async def test_an_upload_is_read_from_the_answer():
+    answer = {
+        "ok": True,
+        "upload_id": "up_x",
+        "upload_url": "https://files.test/u/token",
+        "expires_at": "2026-11-18T12:15:00Z",
+        "max_bytes": 100,
+    }
+    upload = await client_for(lambda request: httpx.Response(200, json=answer)).create_upload()
+    assert (upload.upload_id, upload.upload_url, upload.max_bytes) == (
+        "up_x",
+        "https://files.test/u/token",
+        100,
+    )
+    broken = client_for(lambda request: httpx.Response(200, json=answer | {"max_bytes": "100"}))
+    with pytest.raises(AssetsApiError, match="Unexpected response"):
+        await broken.create_upload()
+
+
+async def test_a_stored_file_comes_from_the_service_without_a_key():
+    seen = []
+
+    def handler(request):
+        seen.append(request)
+        return httpx.Response(200, content=PNG, headers={"content-type": "image/png"})
+
+    data = await client_for(handler).for_tenant("acme").stored_file(STORED_ANSWER["url"])
+    [request] = seen
+    assert data == PNG
+    assert str(request.url) == f"{BASE_URL}/o/acme/{'A' * 32}/demo-card_4x5_1a2b3c4d.png"
+    assert "authorization" not in request.headers
+    assert "x-contentgun-tenant" not in request.headers
+
+
+async def test_only_a_stored_result_is_fetched():
+    seen = []
+    client = client_for(lambda request: seen.append(request) or httpx.Response(200))
+    with pytest.raises(AssetsApiError, match="no stored result"):
+        await client.stored_file("https://files.test/v1/templates")
+    assert seen == []

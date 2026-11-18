@@ -1,13 +1,22 @@
 import base64
 import logging
 import re
-from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import Field
 
+from cards import (
+    DEFAULT_PAGINATION,
+    CarouselClosing,
+    CarouselCover,
+    SlideText,
+    card_body,
+    carousel_bodies,
+    carousel_pages,
+    pagination_label,
+)
 from client import AssetsClient
 from config import Config
 from errors import AssetsError
@@ -16,37 +25,20 @@ from preview import contact_sheet, png_size, preview_jpeg
 
 logger = logging.getLogger(__name__)
 
-NAMED_FIELDS = frozenset({"template", "format", "image", "icon", "headline", "subline", "handle"})
-PATH_PARAMETERS = {"image": "image_path", "icon": "icon_path"}
-MAX_CAROUSEL_SLIDES = 20
-CAROUSEL_COVER = "carousel-cover"
-CAROUSEL_CONTENT = "carousel-content"
-CAROUSEL_CLOSING = "carousel-closing"
-DEFAULT_PAGINATION = "{page}/{pages}"
+RESERVED = {
+    "template": "template",
+    "format": "format",
+    "image": "image_path",
+    "icon": "icon_path",
+    "headline": "headline",
+    "subline": "subline",
+    "handle": "handle",
+}
 SLIDE_FILE = re.compile(r"(\d{2})\.png")
 PDF_FILE = "carousel.pdf"
 
 
-class CarouselCover(BaseModel):
-    headline: str = Field(description="The hook that makes people swipe, about six words.")
-    topic: str | None = Field(
-        default=None,
-        description="A short uppercase kicker above the hook, such as the subject area. "
-        "Up to 60 characters.",
-    )
-    subline: str | None = Field(
-        default=None,
-        description="One line under the hook that sets up the carousel, about eight words. "
-        "Up to 200 characters.",
-    )
-
-
-class CarouselSlide(BaseModel):
-    headline: str = Field(description="The point this slide makes, a few words.")
-    body: str | None = Field(
-        default=None,
-        description="One or two sentences that explain the point, up to 200 characters.",
-    )
+class CarouselSlide(SlideText):
     icon_path: str | None = Field(
         default=None,
         description="An SVG pictogram under the text, drawn in one brand color.",
@@ -55,14 +47,6 @@ class CarouselSlide(BaseModel):
         default=None,
         description="A PNG, JPEG or WebP under the text, shown as it is. A slide takes either "
         "icon_path or image_path.",
-    )
-
-
-class CarouselClosing(BaseModel):
-    headline: str = Field(description="The resolution or takeaway of the carousel.")
-    cta: str | None = Field(
-        default=None,
-        description="An open question to the reader, up to 200 characters.",
     )
 
 
@@ -86,25 +70,8 @@ def _bytes(graphics: list[Graphic | None], key: str) -> int:
     return sum(len(graphic.data) for graphic in graphics if graphic and graphic.key == key)
 
 
-def _present(values: dict[str, str | None]) -> dict[str, str]:
-    return {key: value for key, value in values.items() if value is not None}
-
-
 def _kilobytes(size: int) -> str:
     return f"{size / 1024:.0f} KB"
-
-
-def _pagination(pattern: str) -> Callable[[int, int], str | None]:
-    if not pattern:
-        return lambda page, pages: None
-    try:
-        pattern.format(page=1, pages=1)
-    except (KeyError, IndexError, ValueError):
-        raise AssetsError(
-            "pagination may only use the placeholders {page} and {pages}, "
-            "for example '{page}/{pages}'."
-        ) from None
-    return lambda page, pages: pattern.format(page=page, pages=pages)
 
 
 class Tools:
@@ -131,26 +98,15 @@ class Tools:
     ) -> Rendering:
         target = output_file(output_path, self.config.output_root, overwrite)
         graphic = self._graphic(image_path, icon_path)
-
-        extra = dict(extra_fields or {})
-        collisions = sorted(set(extra) & NAMED_FIELDS)
-        if collisions:
-            parameter = PATH_PARAMETERS.get(collisions[0], collisions[0])
-            raise AssetsError(
-                f"extra_fields must not contain {collisions[0]!r}. "
-                f"Use the {parameter} parameter instead."
-            )
-
-        body: dict[str, Any] = _present(
-            {
-                "template": template,
-                "format": format,
-                "headline": headline,
-                "subline": subline,
-                "handle": handle,
-            }
+        body = card_body(
+            headline=headline,
+            subline=subline,
+            handle=handle,
+            template=template,
+            format=format,
+            extra_fields=extra_fields,
+            reserved=RESERVED,
         )
-        body.update(extra)
         if graphic is not None:
             body[graphic.key] = graphic.encoded
 
@@ -196,15 +152,8 @@ class Tools:
                 "server's configuration."
             )
         folder = output_folder(output_dir, self.config.output_root)
-        if not slides:
-            raise AssetsError("A carousel needs at least one content slide.")
-        pages = len(slides) + 2
-        if pages > MAX_CAROUSEL_SLIDES:
-            raise AssetsError(
-                f"A carousel has at most {MAX_CAROUSEL_SLIDES} slides, "
-                "cover and closing slide included."
-            )
-        label = _pagination(pagination)
+        pages = carousel_pages(slides)
+        label = pagination_label(pagination)
 
         targets = [folder / f"{number:02d}.png" for number in range(1, pages + 1)]
         document = folder / PDF_FILE
@@ -225,45 +174,18 @@ class Tools:
             except AssetsError as exc:
                 raise AssetsError(f"Slide {page}: {exc}") from None
 
-        shared = _present({"format": format, "handle": handle})
-        bodies: list[dict[str, str]] = [
-            {
-                "template": f"{bundle}/{CAROUSEL_COVER}",
-                **_present(
-                    {"headline": cover.headline, "topic": cover.topic, "subline": cover.subline}
-                ),
-                **shared,
-            }
-        ]
-        for page, (slide, graphic) in enumerate(zip(slides, graphics, strict=True), start=2):
-            body = {
-                "template": f"{bundle}/{CAROUSEL_CONTENT}",
-                **_present(
-                    {
-                        "headline": slide.headline,
-                        "body": slide.body,
-                        "pagination": label(page, pages),
-                    }
-                ),
-                **shared,
-            }
-            if graphic is not None:
-                body[graphic.key] = graphic.encoded
-                if graphic.key == "icon" and icon_color:
-                    body["icon_color"] = icon_color
-            bodies.append(body)
-        bodies.append(
-            {
-                "template": f"{bundle}/{CAROUSEL_CLOSING}",
-                **_present(
-                    {
-                        "headline": closing.headline,
-                        "cta": closing.cta,
-                        "pagination": label(pages, pages),
-                    }
-                ),
-                **shared,
-            }
+        bodies = carousel_bodies(
+            bundle=bundle,
+            cover=cover,
+            slides=slides,
+            closing=closing,
+            graphics=[
+                None if graphic is None else {graphic.key: graphic.encoded} for graphic in graphics
+            ],
+            label=label,
+            handle=handle,
+            format=format,
+            icon_color=icon_color,
         )
 
         # Render every slide before writing any, so a failing slide leaves the folder untouched.

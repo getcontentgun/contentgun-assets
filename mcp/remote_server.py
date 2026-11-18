@@ -2,32 +2,50 @@ import argparse
 import logging
 import sys
 import time
-from collections.abc import Callable, Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from datetime import UTC, datetime
-from typing import Any
+from typing import Annotated, Any, Literal, TypeVar
 from urllib.parse import urlsplit
 
+import httpx
 import uvicorn
 from mcp.server.auth.middleware.auth_context import get_access_token
 from mcp.server.auth.settings import AuthSettings, ClientRegistrationOptions, RevocationOptions
-from mcp.server.mcpserver import MCPServer
+from mcp.server.mcpserver import Image, MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp.server.transport_security import TransportSecuritySettings
 from mcp_types import ToolAnnotations
+from pydantic import Field
 from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
 from accounts import Accounts
-from errors import ConfigError
+from cards import (
+    CAROUSEL_CLOSING,
+    CAROUSEL_CONTENT,
+    CAROUSEL_COVER,
+    CAROUSEL_WRITING,
+    DEFAULT_PAGINATION,
+    LIMITS,
+    LIST_TEMPLATES,
+    MAX_CAROUSEL_SLIDES,
+    CarouselClosing,
+    CarouselCover,
+)
+from client import AssetsClient
+from errors import AssetsError, ConfigError
 from login import Logins
 from login_pages import add_login_routes
 from mailer import Mailer, mailer_for
 from oauth import REQUIRED_SCOPE, SCOPES, Provider
 from remote_config import RemoteConfig, load_remote_config
+from remote_tools import REMOTE, ContentSlide, RemoteTools, Result
 from version import __version__
 
 logger = logging.getLogger(__name__)
+
+T = TypeVar("T")
 
 DEFAULT_PORT = 8020
 CLAUDE_ORIGINS = ("https://claude.ai", "https://claude.com")
@@ -36,10 +54,69 @@ KEEP_ALIVE_S = 130
 QUIET_LOGGERS = ("httpx", "mcp")
 
 INSTRUCTIONS = """\
-Contentgun renders social media cards and carousels with the templates of the signed-in team. \
-whoami shows which address and team are signed in."""
+Contentgun renders social media cards and Instagram carousels with the templates of the \
+signed-in team. list_templates shows the templates and their fields. render_card renders one \
+card, render_carousel a whole carousel; both return URLs and a preview image: look at the \
+preview before you report the result, and give the user the URLs. To put an image file from the \
+conversation on a card, call create_upload, run the curl command it returns in your code \
+execution environment, then pass the upload_id. whoami shows which address and team are signed \
+in."""
 
+CREATE_UPLOAD = """\
+Get a URL that takes one image or icon file for a card. Run the returned command in your code \
+execution environment, with the path of the file in place of FILE; files the user attached to \
+the conversation are usually below /mnt/user-data/uploads/. Then pass upload_id to render_card \
+or to a slide of render_carousel: as image_upload for a PNG, JPEG or WebP, as icon_upload for an \
+SVG. The URL takes one file, up to max_bytes, within 15 minutes. If the command cannot reach the \
+host, the code execution environment may not reach this domain: tell the user that it has to be \
+added under "Additional allowed domains" in the settings of Claude, and show the exact output of \
+the command."""
+
+GRAPHIC_SOURCES = """\
+A template that accepts an image takes image_url, a public https address of a PNG, JPEG or WebP, \
+or image_upload, the upload_id of a file sent with create_upload. A template that accepts an \
+icon takes icon_svg, the markup of an SVG pictogram you draw yourself with a viewBox and without \
+text, icon_url or icon_upload. list_templates reports both as accepts_image and accepts_icon. \
+Pass at most one of these five."""
+
+RENDER_CARD = f"""\
+Render one card as a PNG. Returns its URL and a preview.
+
+{LIMITS} What reads well: a headline of about six words and a subline of about eight; the full \
+limits fit, but look like a wall of text.
+
+The handle is never filled in: pass the account's handle, for example @contentgun. \
+template is a template id from list_templates, written bundle/template; without one the service \
+uses the team's default template. Every template's description says what it is for and how to \
+fill its fields. Fields other than headline, subline and handle go into extra_fields.
+
+{GRAPHIC_SOURCES}
+
+For a carousel, use render_carousel."""
+
+RENDER_CAROUSEL = f"""\
+Render an Instagram carousel: the cover first, one content slide per entry in slides, the \
+closing slide last. The slides use the templates {CAROUSEL_COVER}, {CAROUSEL_CONTENT} and \
+{CAROUSEL_CLOSING} of one bundle. Every slide gets the same format and handle; the content and \
+closing slides show the pagination, the cover shows a swipe arrow. Returns the URL of every \
+slide, in order, and one preview image with all slides. With pdf, the same slides also come as \
+one PDF, one page each, which LinkedIn takes as a document post.
+
+{CAROUSEL_WRITING}
+
+A content slide can carry a graphic under its text: a pictogram from icon_svg, icon_url or \
+icon_upload, drawn in the accent color or, with icon_color 'text', in the text color; or a \
+picture shown as it is, from image_url or image_upload. Give either every content slide a \
+pictogram or none of them.
+
+{LIMITS} A carousel has at most {MAX_CAROUSEL_SLIDES} slides; Instagram's publishing API takes \
+at most 10."""
+
+READS = ToolAnnotations(read_only_hint=True, open_world_hint=True)
+WRITES = ToolAnnotations(read_only_hint=False, destructive_hint=False, open_world_hint=True)
 WHOAMI = ToolAnnotations(read_only_hint=True, open_world_hint=False)
+HANDLE = "The account's handle, for example @contentgun. Never filled in for you."
+FORMAT = "'4:5' (1080x1350), '1:1' (1080x1080) or '9:16' (1080x1920), as the template offers."
 
 
 def _moment(seconds: Any) -> str | None:
@@ -61,7 +138,28 @@ def _hosts(public_url: str) -> list[str]:
     return hosts
 
 
-def _add_tools(server: MCPServer) -> None:
+def _tenant() -> str:
+    token = get_access_token()
+    tenant = None if token is None else (token.claims or {}).get("tenant")
+    if not isinstance(tenant, str):
+        raise ToolError("Nobody is signed in.")
+    return tenant
+
+
+async def _run(call: Awaitable[T]) -> T:
+    try:
+        return await call
+    except AssetsError as exc:
+        raise ToolError(str(exc)) from None
+
+
+def _content(result: Result) -> list[str | Image]:
+    if result.preview is None:
+        return [result.summary]
+    return [result.summary, Image(data=result.preview, format="jpeg")]
+
+
+def _add_tools(server: MCPServer, tools: RemoteTools) -> None:
     @server.tool(
         description="Show which address and team are signed in to Contentgun, and until when.",
         annotations=WHOAMI,
@@ -79,12 +177,145 @@ def _add_tools(server: MCPServer) -> None:
             "access_expires_at": _moment(token.expires_at),
         }
 
+    @server.tool(description=LIST_TEMPLATES, annotations=READS, structured_output=True)
+    async def list_templates() -> dict[str, Any]:
+        return await _run(tools.list_templates(_tenant()))
+
+    @server.tool(description=CREATE_UPLOAD, annotations=WRITES, structured_output=True)
+    async def create_upload() -> dict[str, Any]:
+        return await _run(tools.create_upload(_tenant()))
+
+    @server.tool(description=RENDER_CARD, annotations=WRITES, structured_output=False)
+    async def render_card(
+        headline: Annotated[str, Field(description="The headline, 1 to 140 characters.")],
+        subline: Annotated[
+            str | None,
+            Field(description="The second line, for a template that declares subline."),
+        ] = None,
+        handle: Annotated[str | None, Field(description=HANDLE)] = None,
+        template: Annotated[
+            str | None,
+            Field(
+                description="A template id from list_templates, written bundle/template. "
+                "Defaults to the team's default template."
+            ),
+        ] = None,
+        format: Annotated[str | None, Field(description=FORMAT)] = None,
+        image_url: Annotated[
+            str | None,
+            Field(description="A public https address of a PNG, JPEG or WebP."),
+        ] = None,
+        image_upload: Annotated[
+            str | None,
+            Field(description="The upload_id of a PNG, JPEG or WebP sent with create_upload."),
+        ] = None,
+        icon_svg: Annotated[
+            str | None,
+            Field(
+                description="The markup of an SVG pictogram you draw yourself, with a viewBox "
+                "and without text."
+            ),
+        ] = None,
+        icon_url: Annotated[
+            str | None, Field(description="A public https address of an SVG pictogram.")
+        ] = None,
+        icon_upload: Annotated[
+            str | None, Field(description="The upload_id of an SVG sent with create_upload.")
+        ] = None,
+        extra_fields: Annotated[
+            dict[str, str] | None,
+            Field(description="Further fields the template declares, such as body or cta."),
+        ] = None,
+    ) -> list[str | Image]:
+        result = await _run(
+            tools.render_card(
+                _tenant(),
+                headline=headline,
+                subline=subline,
+                handle=handle,
+                template=template,
+                format=format,
+                extra_fields=extra_fields,
+                image_url=image_url,
+                image_upload=image_upload,
+                icon_svg=icon_svg,
+                icon_url=icon_url,
+                icon_upload=icon_upload,
+            )
+        )
+        return _content(result)
+
+    @server.tool(description=RENDER_CAROUSEL, annotations=WRITES, structured_output=False)
+    async def render_carousel(
+        cover: Annotated[CarouselCover, Field(description="The first slide.")],
+        slides: Annotated[
+            list[ContentSlide],
+            Field(
+                min_length=1,
+                max_length=MAX_CAROUSEL_SLIDES - 2,
+                description="The content slides between cover and closing slide, in order.",
+            ),
+        ],
+        closing: Annotated[CarouselClosing, Field(description="The last slide.")],
+        handle: Annotated[str | None, Field(description=HANDLE)] = None,
+        format: Annotated[
+            str | None,
+            Field(description="'4:5' (1080x1350, the default) or '1:1' (1080x1080)."),
+        ] = None,
+        pagination: Annotated[
+            str,
+            Field(
+                description="The page indicator on content and closing slides, with {page} and "
+                "{pages} as placeholders: '{page}/{pages}' gives 2/7, '{page} von {pages}' "
+                "gives 2 von 7. An empty string leaves it out."
+            ),
+        ] = DEFAULT_PAGINATION,
+        icon_color: Annotated[
+            Literal["accent", "text"] | None,
+            Field(
+                description="The color of every pictogram: 'accent', the bundle's accent color "
+                "and the default, or 'text', the text color."
+            ),
+        ] = None,
+        pdf: Annotated[
+            bool,
+            Field(
+                description="Also render all slides as one PDF, one page per slide, for a "
+                "LinkedIn document post."
+            ),
+        ] = False,
+        bundle: Annotated[
+            str | None,
+            Field(
+                description="The bundle whose carousel templates render the slides, as listed "
+                "by list_templates. Needed only when several of the team's bundles offer "
+                "carousels."
+            ),
+        ] = None,
+    ) -> list[str | Image]:
+        result = await _run(
+            tools.render_carousel(
+                _tenant(),
+                cover=cover,
+                slides=slides,
+                closing=closing,
+                handle=handle,
+                format=format,
+                pagination=pagination,
+                icon_color=icon_color,
+                pdf=pdf,
+                bundle=bundle,
+            )
+        )
+        return _content(result)
+
 
 def build_app(
     config: RemoteConfig,
     *,
     mailer: Mailer | None = None,
     clock: Callable[[], float] = time.time,
+    transport: httpx.AsyncBaseTransport | None = None,
 ) -> Starlette:
     """The ASGI app. Raises ConfigError when the tenants file is invalid."""
     for name in QUIET_LOGGERS:
@@ -113,7 +344,7 @@ def build_app(
             validate_token_resource=True,
         ),
     )
-    _add_tools(server)
+    _add_tools(server, RemoteTools(AssetsClient(config, transport, wording=REMOTE)))
     add_login_routes(server, logins, provider.finish, config, mailer or mailer_for(config))
 
     @server.custom_route("/health", methods=["GET"])

@@ -191,10 +191,11 @@ length, image and icon size and request id, never card text or the key.
 |--------|------|
 | `mcp/__main__.py` | Entry point when the folder is run |
 | `mcp/config.py` | Environment to a frozen `Config`, validated at startup |
-| `mcp/client.py` | HTTP calls to `/v1/templates`, `/v1/render` and `/v1/document`, every failure as `AssetsApiError` |
+| `mcp/client.py` | HTTP calls to `/v1/templates`, `/v1/render` and `/v1/document`, every failure as `AssetsApiError`; shared with the remote server |
 | `mcp/paths.py` | Path confinement and the atomic file write |
 | `mcp/preview.py` | JPEG preview and the carousel contact sheet, with Pillow |
 | `mcp/tools.py` | The three tools as plain async methods, independent of the SDK |
+| `mcp/cards.py` | The limits, the carousel models and the request bodies, shared with the remote server |
 | `mcp/server.py` | `MCPServer` wiring, tool descriptions, `main()` |
 | `mcp/errors.py` | `AssetsError` and `ConfigError`, which both servers use |
 

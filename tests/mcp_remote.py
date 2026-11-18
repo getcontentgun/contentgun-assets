@@ -112,12 +112,16 @@ class Remote:
 
 @asynccontextmanager
 async def running(
-    config: RemoteConfig | None = None, *, clock: Clock | None = None
+    config: RemoteConfig | None = None,
+    *,
+    clock: Clock | None = None,
+    transport: httpx.AsyncBaseTransport | None = None,
 ) -> AsyncIterator[Remote]:
+    """The remote server in process; transport stands in for the assets service."""
     config = config or remote_config()
     clock = clock or Clock()
     outbox = Outbox()
-    app = build_app(config, mailer=outbox, clock=clock)
+    app = build_app(config, mailer=outbox, clock=clock, transport=transport)
     async with LifespanManager(app) as manager:
         transport = httpx.ASGITransport(app=manager.app)
         async with httpx.AsyncClient(transport=transport, base_url=config.public_url) as client:

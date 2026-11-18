@@ -8,21 +8,22 @@ from mcp.server.mcpserver.exceptions import ToolError
 from mcp_types import ToolAnnotations
 from pydantic import Field
 
-from client import AssetsClient
-from config import ConfigError, load_config
-from errors import AssetsError
-from tools import (
+from cards import (
     CAROUSEL_CLOSING,
     CAROUSEL_CONTENT,
     CAROUSEL_COVER,
+    CAROUSEL_WRITING,
     DEFAULT_PAGINATION,
+    LIMITS,
+    LIST_TEMPLATES,
     MAX_CAROUSEL_SLIDES,
     CarouselClosing,
     CarouselCover,
-    CarouselSlide,
-    Rendering,
-    Tools,
 )
+from client import AssetsClient
+from config import ConfigError, load_config
+from errors import AssetsError
+from tools import CarouselSlide, Rendering, Tools
 
 logger = logging.getLogger(__name__)
 
@@ -36,17 +37,6 @@ contentgun-assets renders social media cards and Instagram carousels as PNG file
 {output_root}. list_templates shows the templates and their fields. render_card saves one card, \
 render_carousel saves a whole carousel into one folder. Both return the saved paths and a preview \
 image: look at it before you report the result."""
-
-LIST_TEMPLATES = """\
-List the templates the contentgun-assets service renders: for every template its id \
-(bundle/template), its bundle, description, formats with pixel sizes, the fields it accepts, \
-which are required, their defaults, and whether it takes an image or an icon. Call it whenever \
-you are unsure which template or fields to use, instead of guessing."""
-
-LIMITS = """\
-Limits the service enforces: headline 1 to 140 characters; subline, body and cta up to 200; \
-handle and topic up to 60; pagination up to 16. A template may set tighter limits of its own, \
-which list_templates reports as limits. A literal newline forces a line break. No emoji."""
 
 RENDER_CARD = f"""\
 Render one card and save it as a PNG file. Returns the saved path and a preview.
@@ -72,10 +62,7 @@ cover shows a swipe arrow. Returns the saved paths and one preview image with al
 pdf, the same slides also go into carousel.pdf, one page each, which LinkedIn takes as a document \
 post.
 
-Write it like this: the cover's headline is the hook, about six words, its topic a short kicker \
-above it, and its subline one line under the rule that sets up the carousel. Each content slide \
-makes one point, with a short headline and a body of one or two sentences. The closing slide \
-resolves the topic in its headline and asks the reader an open question in cta.
+{CAROUSEL_WRITING}
 
 A content slide can carry a graphic under its text: icon_path for an SVG pictogram, drawn in \
 the accent color or, with icon_color 'text', in the text color, or image_path for a picture \

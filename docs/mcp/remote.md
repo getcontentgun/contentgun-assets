@@ -26,6 +26,57 @@ to pass it on.
 
 The page and the mail are in German for a browser that prefers German, otherwise in English.
 
+## Tools
+
+| Tool | What it does |
+|---|---|
+| `list_templates` | The templates of the tenant, as `GET /v1/templates` lists them |
+| `render_card` | One card, stored by the service; answers with its URL, its size, until when the URL works, and a preview |
+| `render_carousel` | Cover, content slides and closing slide, optionally also as one PDF; answers with every URL in order and one preview of all slides |
+| `create_upload` | A URL that takes one file, and the `curl -T` command that sends it |
+| `whoami` | The signed-in address, its tenant, and until when the sign-in lasts |
+
+The tenant always comes from the token: no tool takes one. Every request to the service carries
+`INTERNAL_KEY` and that tenant in `X-Contentgun-Tenant`, so a person sees and renders exactly
+what the keys of the tenant would.
+
+Results are stored by the service, with `"output": "url"`, so they need storage there; without it,
+every render answers that storage is not configured. The model gets the public URL of the file,
+under `PUBLIC_FILES_URL` of the service. The server reads the PNG back through `ASSETS_BASE_URL`
+for the preview, so the preview does not depend on the public address. When that read fails, the
+answer has the URL without a preview.
+
+### Images and icons
+
+A card or a content slide takes at most one of five sources:
+
+| Parameter | Source |
+|---|---|
+| `image_url` | A public `https` address of a PNG, JPEG or WebP, which the service fetches |
+| `image_upload` | The `upload_id` of a PNG, JPEG or WebP sent with `create_upload` |
+| `icon_svg` | The markup of an SVG pictogram, which Claude draws itself |
+| `icon_url` | A public `https` address of an SVG |
+| `icon_upload` | The `upload_id` of an SVG sent with `create_upload` |
+
+`icon_svg` and `image_url` work without anything else. A file attached to the chat goes through
+`create_upload`: Claude runs the returned command in its code execution environment, which takes
+an outside address only when it is allowed there. An owner of the Claude organization adds the
+host of `PUBLIC_FILES_URL`, for example `files.contentgun.de`, under Settings, Capabilities,
+"Allow network egress", "Additional allowed domains". Without that entry the command fails with
+`CONNECT tunnel failed, response 403`, and the description of `create_upload` tells Claude to say
+so. The same entry lets Claude download a result into its environment and offer it as a file.
+
+`extra_fields` takes the further fields a template declares, but none of the keys the request
+sets itself, such as `template`, `image` or `output`.
+
+### Failures
+
+A message of the service comes through as the tool's error, with the hint the local server gives
+for its status. A failure of the service itself names no internal address: it says that the
+Contentgun service did not answer, cannot be reached, refused the connector, or answered
+unexpectedly. In a carousel, the error names the slide; the slides rendered before it stay stored
+until they expire.
+
 ## Who may sign in
 
 An address may sign in when it belongs to a tenant:
@@ -152,7 +203,11 @@ A code held back by a limit gets the same page as one sent, and the log says so.
 
 | Module | Role |
 |---|---|
-| `remote_server.py` | `build_app()`, the tools, `/health` and `main()` |
+| `remote_server.py` | `build_app()`, the descriptions of the tools, `/health` and `main()` |
+| `remote_tools.py` | What the tools do, without the SDK, and the wording of failures |
+| `cards.py` | What both servers share: the limits, the carousel models, the bodies of cards and carousels |
+| `client.py` | The HTTP client of the service, shared with the local server |
+| `preview.py` | The JPEG preview and the contact sheet, shared with the local server |
 | `remote_config.py` | The settings from the environment |
 | `oauth.py` | The OAuth provider: signed clients, codes and tokens |
 | `login.py` | The sign-ins in progress, the codes and the limits |
@@ -162,6 +217,8 @@ A code held back by a limit gets the same page as one sent, and the log says so.
 | `mailer.py` | SMTP and the console |
 | `version.py` | The version, the same as the service's |
 
-The remote modules import nothing of the local server, and `tests/test_mcp_remote_server.py`
-checks that. The tests run the server in process with `tests/mcp_remote.py`, which plays the steps
+The remote modules import nothing that only the local server uses, and
+`tests/test_mcp_remote_server.py` checks that. The tests run the server in process with `tests/mcp_remote.py`, which plays the steps
 of claude.ai, a mailbox that collects the codes, and a clock that moves forward.
+`tests/test_mcp_remote_tools.py` runs the tools against a fake of the service, and
+`tests/test_mcp_remote_e2e.py` against the real one, with Chromium and storage in memory.
