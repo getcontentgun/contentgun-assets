@@ -34,8 +34,8 @@ python3 scripts/new_api_key.py
 
 ## The internal key
 
-`INTERNAL_KEY` is the key of a service that acts for every tenant, the remote MCP server. It sends
-the tenant along:
+`INTERNAL_KEY` is the key of a service that acts for every tenant, the
+[remote MCP server](mcp/remote.md). It sends the tenant along:
 
 ```
 Authorization: Bearer <INTERNAL_KEY>

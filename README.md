@@ -142,11 +142,16 @@ Runs `ruff check`, `ruff format --check` and the suite as separate stages and pr
 argument goes to pytest. The render tests drive real Chromium; without it they are skipped and the
 script says so.
 
-## MCP server for Claude Desktop
+## MCP servers
 
 `mcp/` holds a local MCP server that lets Cowork in the Claude desktop app list the templates and
 render cards and whole carousels into a local folder, through this service. Setup, tools and
 troubleshooting are in [docs/mcp/README.md](docs/mcp/README.md).
+
+The same folder holds the remote MCP server that claude.ai connects to as a custom connector.
+People sign in with a code sent to an address of their tenant, and it renders for that tenant
+with the internal key. Settings, sign-in and operation are in
+[docs/mcp/remote.md](docs/mcp/remote.md).
 
 ## Documentation
 

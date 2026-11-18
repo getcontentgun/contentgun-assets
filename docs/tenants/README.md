@@ -39,7 +39,7 @@ default_template = "studio-cards/card"
 |-----|----------|-------------|
 | table name | yes | The name of the tenant and of its folder in `BUNDLES_DIR`, following the naming rule of bundles, `^[a-z0-9][a-z0-9-]*$` |
 | `api_keys` | no | The hashes of its keys, see [Keys](#keys). A tenant without keys is reachable through the internal key only |
-| `emails` | no | Email addresses of the tenant, kept in lower case. The service only checks their form and that no two tenants share one; a later remote MCP server signs people in with them |
+| `emails` | no | Email addresses of the tenant, kept in lower case. The service only checks their form and that no two tenants share one; the [remote MCP server](../mcp/remote.md) signs people in with them |
 | `bundles` | no | The bundles the tenant may use, its own and built-in ones by name. Without the key it may use all of them |
 | `default_template` | no | The template id a request without `template` gets. Without the key, `DEFAULT_TEMPLATE` |
 
@@ -117,8 +117,10 @@ start.
 
 ## The internal key
 
-`INTERNAL_KEY` is the key of a service that acts for every tenant: the remote MCP server, which signs
-people in and then renders for their tenant. It sends the key with the tenant's name in a header:
+`INTERNAL_KEY` is the key of a service that acts for every tenant: the
+[remote MCP server](../mcp/remote.md), which signs people in and then renders for their tenant.
+It reads the `emails` of the same tenants file to know who may sign in, and sends the key with
+the tenant's name in a header:
 
 ```
 Authorization: Bearer <INTERNAL_KEY>

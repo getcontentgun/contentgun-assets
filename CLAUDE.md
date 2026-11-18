@@ -28,6 +28,7 @@ python3 scripts/new_api_key.py                    # a key and its hash for the t
 docker compose -f compose.dev.yaml --profile storage up -d storage   # RustFS on 127.0.0.1:9010
 .venv/bin/python scripts/setup_storage.py         # create the bucket, set its lifecycle rules
 .venv/bin/python scripts/put_bundles.py <folder>  # the bundles of one tenant into the bucket
+.venv/bin/python mcp/remote_server.py            # the remote MCP server, settings in docs/mcp/remote.md
 ```
 
 Startup prerequisites: `.env` exists with a key in `API_KEYS` or a tenants file in `TENANTS_FILE`,
@@ -65,7 +66,7 @@ or the setting; a missing Chromium fails when the lifespan starts.
 | `scripts/setup_storage.py`, `scripts/put_bundles.py` | Create the bucket of the settings and set its lifecycle rules; copy the bundles of one tenant into it |
 | `tenants.example.toml` | The form of a tenants file, with placeholder hashes that stop the start |
 | `bundles/demo/_base/` | Shared skeleton and CSS of every template of the demo bundle. Not a template: the registry skips it because of the leading underscore |
-| `mcp/` | Local stdio MCP server for the Claude desktop app, a client of the HTTP API. A plain folder, not a package; never deployed. See `docs/mcp/README.md` |
+| `mcp/` | Two MCP servers, both clients of the HTTP API: the local stdio server for the Claude desktop app, never deployed, and the remote server that claude.ai connects to, with OAuth and a sign-in by mail (`remote_server.py`). A plain folder, not a package. See `docs/mcp/README.md` and `docs/mcp/remote.md` |
 | `bin/test` | Linters and the test suite as stages, with a summary and `--lint`/`--suite`/`--bail` |
 | `docker/assets.Dockerfile` | The image of the service, on Microsoft's Playwright image, with the built-in bundles and no bundle of a tenant. See `docs/docker.md` |
 | `compose.dev.yaml` | Runs the image locally with `./bundles` mounted over the built-in bundles and the configuration from `.env`; the profile `storage` adds RustFS |
@@ -154,11 +155,24 @@ fills one in, so a card can only carry the identity its caller sent.
 - **The suite pins `API_KEYS`, `TENANTS_FILE`, `INTERNAL_KEY`, `BUNDLES_DIR`, `DEFAULT_TEMPLATE` and the storage settings in `tests/conftest.py`,** the paths, the internal key and the storage to blank, so a variable in the shell or in `.env` cannot change what it tests. Storage in the tests is `MemoryStorage` from `tests/memory_storage.py`, behind `files_of()`; `storage_app` holds the three tenants of `tenant_app` with it. The tests address templates through the id constants there, build small bundles of their own with `write_bundle()`, which borrows a font file from the bundle under test, and build apps with tenants of their own through `tenants_for()`; `tenant_app` holds three tenants with a bundle each, one of which leaves out `demo`.
 - **A SIGKILLed uvicorn leaves Chromium behind.** Clean up with `pkill -f chromium_headless_shell`.
 - **`mcp/` is a plain folder, not a package.** The desktop app runs the folder directly, which puts it on the import path, so its modules import each other flat (`from config import ...`). An `__init__.py` in it would make it a package named `mcp` that shadows the SDK of the same name; without one, Python prefers the installed SDK. Its module names must therefore not collide with `app`, `tests` or an installed package, and `pyproject.toml` keeps `mcp` third-party for ruff and puts the folder on pytest's path.
-- **stdout belongs to the MCP protocol.** Nothing in `mcp/` may print: a stray line corrupts the stream and the desktop app drops the server. `main()` logs to stderr, which the app collects in `~/Library/Logs/Claude/mcp-server-contentgun-assets.log`.
+- **stdout belongs to the MCP protocol of the local server.** Nothing it runs may print: a stray line corrupts the stream and the desktop app drops the server. `main()` logs to stderr, which the app collects in `~/Library/Logs/Claude/mcp-server-contentgun-assets.log`.
 - **`mcp/` must not import from `app`.** `app.config` reads this repository's `.env` and `app.main` loads the tenants and their bundles at import time; the MCP server runs elsewhere and talks to the service over HTTP only.
 - **`render_carousel` needs a bundle,** from its `bundle` parameter or `ASSETS_BUNDLE`, and refuses before any request without one. It renders `<bundle>/carousel-cover`, `<bundle>/carousel-content` and `<bundle>/carousel-closing`, so a bundle offers carousels by having templates of these names. The tool descriptions name no template; hints for a single template belong into its `description`.
 - **`MCPServer.call_tool()` raises in-process.** A `ToolError` becomes an `is_error` result only over the protocol, so the server tests go through `mcp.Client`, not through `call_tool()` directly.
 - **The limits in the MCP tool descriptions mirror `app/schemas.py`.** The model never reads the docs, so `LIMITS` in `mcp/server.py` repeats every cap; `tests/test_mcp_server.py` fails when the two drift apart.
+- **The remote MCP server signs instead of storing.** Client ids, client secrets, access and refresh tokens are HMAC-signed with keys derived from `MCP_SECRET` and `MCP_PUBLIC_URL`, one per purpose (`mcp/signing.py`), so a restart signs nobody out, and a token of another purpose or another server is refused. A new `MCP_SECRET` invalidates every client, and Claude answers with `invalid_client` until the connector is reconnected; signing everybody out on purpose is `MCP_SESSIONS_AFTER`.
+- **The answer to a registration is the object `register_client()` changed.** The SDK hands the provider the new client and returns that same object, which is how Claude learns the signed client id and the secret. A provider that builds a new object registers a client Claude never hears of. `get_client()` rebuilds the client with the scope `cards offline_access`: a client without a scope gets every scope refused at `/authorize`.
+- **A client id needs its random part.** Besides its time, its auth method and the digests of its callbacks, it carries 16 random bytes; without them two registrations of Claude in the same second would get the same id and secret, and anyone posting Claude's body to the open `/register` would hold them.
+- **A token carries its tenant, and the address must still belong to it on every request.** `Provider._refusal()` checks the expiry, the 90 days of a sign-in, `MCP_SESSIONS_AFTER`, the scope and the tenant of the address. `load_refresh_token()` also compares the token's client binding with the presenting client: the SDK only compares the client id of the `RefreshToken` it gets back with the request, which the provider fills in itself.
+- **`load_access_token()` must never raise.** The bearer middleware runs on every route, the metadata documents included, so an exception there turns every request with a bad `Authorization` header into a `500`.
+- **The sign-in has no link, on purpose.** A link that completes a sign-in lets anyone start one for a customer's address from their own Claude account and have an unwary click complete it. The code works only in the window that started the sign-in; a sign-in without a sent mail compares against a value no code matches, so it fails like a wrong code, and the attempts are never reset.
+- **Chrome applies `form-action` to the redirect after a form post.** The CSP of the sign-in pages lists the origin of the sign-in's callback next to `'self'`; without it Chrome blocks the `303` back to claude.ai after the code, while Firefox lets it through.
+- **The remote server runs as one process, without access log.** Sign-ins in progress and authorization codes live in memory, and uvicorn's access log would print the query string of `/login?txn=`. `main()` also cuts a shutdown to 3 seconds, because Claude holds a `subscriptions/listen` request open for minutes.
+- **The tenants file is read twice.** The service and `mcp/accounts.py` parse its `emails` each on their own, and `tests/test_mcp_remote_accounts.py` pins that they map a file alike. The remote server reads the file again when it changes and keeps the addresses read before when the new file is invalid or gone.
+- **`bin/test` asks for the SDK by its distribution.** `importlib.util.find_spec("mcp")` finds the folder `mcp/` as a namespace package when the SDK is missing, so it would never report it.
+- **The `bin/` scripts run on the bash 3.2 of macOS.** There, an apostrophe in a heredoc inside `$(...)` breaks the parsing of the whole script.
+- **The tests of the remote server speak JSON-RPC themselves.** `tests/mcp_remote.py` plays the requests of claude.ai over `httpx.ASGITransport`, the 2026-07-28 envelope with its `Mcp-Method` and `Mcp-Name` headers included: `mcp.Client` reaches an HTTP server through `httpx2`, which the suite does not pin.
+- **The version lives in `app/__init__.py` and in `mcp/version.py`,** because `mcp/` must not import `app`. `tests/test_mcp_remote_server.py` fails when the two differ.
 - **Python 3.11 is the floor.** Development runs 3.13. `tomllib` is the newest feature in use, and ruff's `target-version` is `py311` so the `UP` rules cannot introduce newer syntax.
 
 ## Adding a template
@@ -174,12 +188,12 @@ and inlines the SVG from there, so it stays crisp and can inherit `currentColor`
 
 ## Conventions
 
-- Identifiers, comments, log lines and `docs/` are English. There is no user-facing German text in this service; German only appears as sample content.
+- Identifiers, comments, log lines and `docs/` are English. The only user-facing German text is the sign-in page and mail of the remote MCP server, next to their English version in `mcp/login_pages.py`; otherwise German only appears as sample content.
 - Error envelope: `{"ok": false, "error": "A full sentence."}`. Error strings end with a period.
 - Versioned paths `/v1/<resource>`. `/health` stays unversioned, and so do `/o/…` and `/u/…`, the file URLs the service hands to callers.
 - Bearer only. A key in a query parameter is never accepted.
-- Dependencies are pinned with `==` in `requirements.txt`; dev-only tools live in `requirements-dev.txt`, the MCP server's in `requirements-mcp.txt`, which `requirements-dev.txt` includes.
-- Never log the rendered text, a key, a key hash, a storage credential, a URL the service hands out, or a URL a caller sent and the addresses it resolved to. Tenant name, template, format, headline length, upload id and sizes are fine.
+- Dependencies are pinned with `==` in `requirements.txt`; dev-only tools live in `requirements-dev.txt`, the MCP servers' in `requirements-mcp.txt`, which pins everything `mcp/` imports and which `requirements-dev.txt` includes.
+- Never log the rendered text, a key, a key hash, a storage credential, a URL the service hands out, or a URL a caller sent and the addresses it resolved to. Tenant name, template, format, headline length, upload id and sizes are fine. The remote MCP server never logs a token, a sign-in code, a client secret or a full email address; an address masked to its first letter and domain is fine.
 - Changing an endpoint means updating the table in `docs/README.md` and the endpoint's own page.
 - A feature beyond the HTTP API gets a folder of its own under `docs/`, such as `docs/mcp/`: its implementation plan while it is being built, its documentation as `README.md` once it exists. The API reference stays in `docs/` itself, one page per endpoint.
 - Commits follow Conventional Commits (`feat:`, `fix:`, `chore:`).

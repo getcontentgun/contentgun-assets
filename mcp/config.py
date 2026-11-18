@@ -6,13 +6,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import urlsplit
 
+from errors import ConfigError
+
 DEFAULT_BASE_URL = "https://api.contentgun.de"
 DEFAULT_TIMEOUT_S = 30.0
 BUNDLE_NAME = re.compile(r"[a-z0-9][a-z0-9-]*")
-
-
-class ConfigError(Exception):
-    pass
 
 
 @dataclass(frozen=True)

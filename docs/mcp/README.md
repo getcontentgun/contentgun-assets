@@ -5,6 +5,9 @@ desktop app, work with this service: list the templates, render single cards and
 carousels into the Social folder. The desktop app starts it over stdio. It talks to the service
 over HTTP, `bin/development` locally or a deployed instance, and is never deployed itself.
 
+The same folder holds the remote MCP server that claude.ai connects to as a connector, with a
+sign-in by mail. It is deployed and described in [remote.md](remote.md).
+
 ## Why it runs locally
 
 - **The session cannot reach the service.** Cowork's shell runs in a Linux VM whose egress proxy does not let it reach the service, and `127.0.0.1` there is the VM, not the Mac.
@@ -59,7 +62,7 @@ when the variable is not set, and give the server a key of its own, so it can be
 touching other callers. With a tenants file, create one with `python3 scripts/new_api_key.py`,
 add its hash to the `api_keys` of the tenant and restart the service, see
 [Tenants](../tenants/README.md#keys). The server sees what that tenant sees: its own bundles and
-the built-in ones. It never uses `INTERNAL_KEY`, which belongs to the remote MCP server to come.
+the built-in ones. It never uses `INTERNAL_KEY`, which belongs to the [remote MCP server](remote.md).
 
 ## Tools
 
@@ -188,11 +191,14 @@ length, image and icon size and request id, never card text or the key.
 |--------|------|
 | `mcp/__main__.py` | Entry point when the folder is run |
 | `mcp/config.py` | Environment to a frozen `Config`, validated at startup |
-| `mcp/client.py` | HTTP calls to `/v1/templates` and `/v1/render`, every failure as `AssetsApiError` |
+| `mcp/client.py` | HTTP calls to `/v1/templates`, `/v1/render` and `/v1/document`, every failure as `AssetsApiError` |
 | `mcp/paths.py` | Path confinement and the atomic file write |
 | `mcp/preview.py` | JPEG preview and the carousel contact sheet, with Pillow |
 | `mcp/tools.py` | The three tools as plain async methods, independent of the SDK |
 | `mcp/server.py` | `MCPServer` wiring, tool descriptions, `main()` |
+| `mcp/errors.py` | `AssetsError` and `ConfigError`, which both servers use |
+
+The modules of the remote server are listed in [remote.md](remote.md#modules).
 
 The folder is not a Python package: it has no `__init__.py`, which would shadow the SDK of the
 same name, and its modules import each other flat, as `from config import ...`. pytest finds them

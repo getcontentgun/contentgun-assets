@@ -73,13 +73,21 @@ if [[ ! -x "${python}" ]]; then
 fi
 
 missing="$("${python}" - <<'PY'
+import importlib.metadata
 import importlib.util
 
 names = (
-    "pytest", "httpx", "asgi_lifespan", "PIL", "ruff", "pyphen", "playwright", "mcp", "pypdf",
-    "boto3",
+    "pytest", "httpx", "asgi_lifespan", "PIL", "ruff", "pyphen", "playwright", "pypdf", "boto3",
+    "uvicorn",
 )
-print(" ".join(name for name in names if importlib.util.find_spec(name) is None))
+missing = [name for name in names if importlib.util.find_spec(name) is None]
+# The folder mcp/ is found as a namespace package when the SDK is missing, so ask for the
+# distribution of the SDK instead.
+try:
+    importlib.metadata.version("mcp")
+except importlib.metadata.PackageNotFoundError:
+    missing.append("mcp")
+print(" ".join(missing))
 PY
 )"
 if [[ -n "${missing}" ]]; then
