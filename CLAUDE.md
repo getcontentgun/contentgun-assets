@@ -24,6 +24,8 @@ bin/test --suite -k render                        # pytest only
 .venv/bin/pytest -q
 .venv/bin/ruff check . && .venv/bin/ruff format --check .
 docker compose -f compose.dev.yaml up --build     # the service in a container
+docker compose -f compose.dev.yaml --profile storage --profile remote up --build   # with the MCP server and its gateway
+bin/smoke assets <image>                          # start a built image and send one request
 python3 scripts/new_api_key.py                    # a key and its hash for the tenants file
 docker compose -f compose.dev.yaml --profile storage up -d storage   # RustFS on 127.0.0.1:9010
 .venv/bin/python scripts/setup_storage.py         # create the bucket, set its lifecycle rules
@@ -68,8 +70,11 @@ or the setting; a missing Chromium fails when the lifespan starts.
 | `bundles/demo/_base/` | Shared skeleton and CSS of every template of the demo bundle. Not a template: the registry skips it because of the leading underscore |
 | `mcp/` | Two MCP servers, both clients of the HTTP API: the local stdio server for the Claude desktop app, never deployed, and the remote server that claude.ai connects to, with OAuth and a sign-in by mail (`remote_server.py`). A plain folder, not a package. See `docs/mcp/README.md` and `docs/mcp/remote.md` |
 | `bin/test` | Linters and the test suite as stages, with a summary and `--lint`/`--suite`/`--bail` |
+| `bin/smoke` | Starts a built image of the service or the MCP server, waits for `/health` and sends one request; for CI and local checks |
 | `docker/assets.Dockerfile` | The image of the service, on Microsoft's Playwright image, with the built-in bundles and no bundle of a tenant. See `docs/docker.md` |
-| `compose.dev.yaml` | Runs the image locally with `./bundles` mounted over the built-in bundles and the configuration from `.env`; the profile `storage` adds RustFS |
+| `docker/mcp.Dockerfile` | The image of the remote MCP server, on `python:3.12-slim` pinned by digest, with `mcp/` only |
+| `docker/gateway.Caddyfile` | The Caddy of the compose profile `remote`: `/o/` and `/u/` to the service, the rest to the MCP server |
+| `compose.dev.yaml` | Runs the image locally with `./bundles` mounted over the built-in bundles and the configuration from `.env`; the profile `storage` adds RustFS, the profile `remote` the MCP server and its gateway |
 
 `app/rendering.py` is shared by the render, document and debug routes on purpose: the browser
 screenshots and prints exactly the HTML the debug route serves, so the design preview cannot drift
@@ -114,7 +119,11 @@ fills one in, so a card can only carry the identity its caller sent.
 - **A PDF page needs screen media and printed backgrounds.** `render_pdf` switches the page to screen media and prints with `print_background=True`; without them every card comes out on white. `page_ranges="1"` keeps a slide on one page. A document is one print per slide, joined by `app/document.py`, because every slide is an HTML document of its own with its own `:root` variables, so they cannot share one print.
 - **`--force-color-profile=srgb` is not optional on macOS.** Without it Chromium renders through the display profile and every color comes out shifted, the exact values the pixel tests check included.
 - **The Playwright pin and the browser revision belong together.** `playwright==1.62.0` in `requirements.txt` decides which Chromium `playwright install` fetches, and `docker/assets.Dockerfile` builds on `mcr.microsoft.com/playwright/python:v1.62.0-noble`, whose browsers belong to the same version. Bump both together; `tests/test_docker.py` fails when they drift apart.
-- **`.dockerignore` is a list of what the build may see.** Everything else is excluded, `.env` and a tenants file included, so a file the Dockerfile is meant to copy, as it copies `bundles/`, has to be added there as well.
+- **`.dockerignore` is a list of what the builds may see.** Everything else is excluded, `.env` and a tenants file included, so a file a Dockerfile is meant to copy, as they copy `bundles/` and `mcp/`, has to be added there as well; `tests/test_docker.py` checks every `COPY` of both Dockerfiles against it.
+- **Compose resolves the whole file before it applies profiles.** A required variable (`${VAR:?…}`) in a service of the profile `remote` would stop every plain `up`, so the file only uses `${VAR:-}` and the MCP server names a missing setting itself.
+- **The service `mcp` gets its settings one by one.** `env_file: .env` would hand it `API_KEYS` and the keys of the bucket, which it must not hold. `PUBLIC_FILES_URL` of the service and `MCP_PUBLIC_URL` are both interpolated, so an address exported in the shell wins over `.env`.
+- **The gateway passes the original `Host` on.** `/mcp` takes requests only for the host of `MCP_PUBLIC_URL`; Caddy's `reverse_proxy` keeps `Host` as it came, and a proxy that rewrote it to `mcp:8020` would get `421` for every request.
+- **The base image of the MCP server is pinned by tag and digest.** Slim tags are rebuilt in place; a bump changes both in the `FROM` line, and `docker buildx imagetools inspect` shows them.
 - **Compose blanks `BUNDLES_DIR` and `TENANTS_FILE`.** `env_file: .env` passes every variable of `.env` into the container, so a path of the host there would reach a container that has no such path; `environment:` wins over `env_file:`. Blank works because an empty path setting counts as unset, see below.
 - **An empty path setting counts as unset.** `Settings` turns a blank `BUNDLES_DIR` or `TENANTS_FILE` into `None` in a validator. Compose and `tests/conftest.py` rely on that to override a line in `.env`; pydantic-settings' `env_ignore_empty` would not do, because it skips the blank variable and falls back to the very line in `.env` it was meant to override.
 - **Relaunching Chromium happens outside the per-render timeout.** A cold start inside the render budget would bill the launch to whichever request triggered it and could return 504 for a perfectly good template.

@@ -1,0 +1,116 @@
+#!/usr/bin/env bash
+#
+# Starts a built image, waits for its health check and sends the one request a release depends
+# on, then removes the container. CI runs it after every build; locally it needs Docker.
+#
+# Usage: bin/smoke assets <image>    renders a card of the built-in demo bundle
+#        bin/smoke mcp <image>       checks the 401 and the metadata claude.ai starts from
+#        SMOKE_PORT=19000 bin/smoke ...   another port on 127.0.0.1, by default 18080
+
+set -euo pipefail
+
+readonly kind="${1:-}"
+readonly image="${2:-}"
+readonly port="${SMOKE_PORT:-18080}"
+readonly base="http://127.0.0.1:${port}"
+readonly health_seconds=90
+
+container=""
+work_dir=""
+failed=0
+
+usage() {
+    echo "Usage: bin/smoke assets|mcp <image>" >&2
+    exit 2
+}
+
+cleanup() {
+    if [[ -n "${container}" ]]; then
+        if [[ "${failed}" == 1 ]]; then
+            docker logs "${container}" >&2 || true
+        fi
+        docker rm -f "${container}" >/dev/null 2>&1 || true
+    fi
+    if [[ -n "${work_dir}" ]]; then
+        rm -rf "${work_dir}"
+    fi
+}
+trap cleanup EXIT
+
+fail() {
+    failed=1
+    echo "smoke: ${kind}: $1" >&2
+    exit 1
+}
+
+random_key() {
+    openssl rand -hex 32
+}
+
+wait_for_health() {
+    local seconds=0
+    until curl -fsS -o /dev/null "${base}/health" 2>/dev/null; do
+        if [[ "$(docker inspect -f '{{.State.Running}}' "${container}")" != "true" ]]; then
+            fail "the container stopped before it became healthy."
+        fi
+        seconds=$((seconds + 1))
+        if ((seconds > health_seconds)); then
+            fail "/health did not answer within ${health_seconds} seconds."
+        fi
+        sleep 1
+    done
+}
+
+if [[ -z "${kind}" || -z "${image}" ]]; then
+    usage
+fi
+work_dir="$(mktemp -d)"
+
+case "${kind}" in
+    assets)
+        api_key="$(random_key)"
+        container="$(docker run -d --init --shm-size=1g -p "127.0.0.1:${port}:8010" \
+            -e "API_KEYS=${api_key}" "${image}")"
+        wait_for_health
+        status="$(curl -sS -o "${work_dir}/card.png" -w '%{http_code}' \
+            -H "Authorization: Bearer ${api_key}" -H "Content-Type: application/json" \
+            -d '{"template": "demo/card", "headline": "Smoke test"}' "${base}/v1/render")"
+        if [[ "${status}" != "200" ]]; then
+            fail "POST /v1/render answered ${status}."
+        fi
+        signature="$(head -c 8 "${work_dir}/card.png" | od -An -tx1 | tr -d ' \n')"
+        if [[ "${signature}" != "89504e470d0a1a0a" ]]; then
+            fail "POST /v1/render answered with something that is no PNG."
+        fi
+        ;;
+    mcp)
+        container="$(docker run -d -p "127.0.0.1:${port}:8020" \
+            -e "MCP_PUBLIC_URL=${base}" -e "MCP_SECRET=$(random_key)" \
+            -e "INTERNAL_KEY=$(random_key)" -e "ASSETS_BASE_URL=http://127.0.0.1:9" \
+            -e "MCP_EMAILS=smoke@example.com" -e "MCP_MAIL=console" "${image}")"
+        wait_for_health
+        curl -sS -o /dev/null -D "${work_dir}/headers" -X POST \
+            -H "Content-Type: application/json" -H "Accept: application/json, text/event-stream" \
+            -d '{"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}}' "${base}/mcp"
+        if ! grep -q '^HTTP/[0-9.]* 401' "${work_dir}/headers"; then
+            fail "POST /mcp without a token is no 401."
+        fi
+        metadata="${base}/.well-known/oauth-protected-resource/mcp"
+        if ! grep -qi "^www-authenticate:.*resource_metadata=\"${metadata}\"" "${work_dir}/headers"; then
+            fail "the 401 does not point to the resource metadata."
+        fi
+        curl -fsS -o "${work_dir}/server.json" "${base}/.well-known/oauth-authorization-server" ||
+            fail "the metadata of the authorization server is missing."
+        if ! grep -q "\"issuer\":\"${base}\"" "${work_dir}/server.json"; then
+            fail "the metadata names another issuer."
+        fi
+        ;;
+    *)
+        usage
+        ;;
+esac
+
+if [[ "$(docker exec "${container}" id -u)" == "0" ]]; then
+    fail "the container runs as root."
+fi
+echo "smoke: ${kind}: passed (${image})"

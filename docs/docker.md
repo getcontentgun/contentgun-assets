@@ -5,6 +5,9 @@
 built-in bundles in `bundles/`, nothing else: no bundles of a tenant, no `.env`, no tenants file,
 no tests.
 
+`docker/mcp.Dockerfile` builds the [remote MCP server](mcp/remote.md), a second image; compose
+runs it with the profile `remote`, behind a gateway, see [below](#the-profile-remote).
+
 ## Local run
 
 The container reads its configuration from `.env`, so create it first, as described in the
@@ -39,10 +42,49 @@ PORT=8011 docker compose -f compose.dev.yaml up
 | Port | `8010`, uvicorn on `0.0.0.0` inside the container |
 | Health | `HEALTHCHECK` calls `/health` every 30 seconds |
 
-`.dockerignore` lists what the build may see instead of what it may not: everything is excluded
-except `app/`, `bundles/` and `requirements.txt`, so `.env`, a tenants file, the virtualenv and the
-handover notes never reach the build context. A file the Dockerfile is meant to copy has to be
-added there too.
+`.dockerignore` lists what the builds may see instead of what they may not: everything is
+excluded except `app/`, `bundles/`, `mcp/`, `requirements.txt` and `requirements-mcp.txt`, so
+`.env`, a tenants file, the virtualenv and the handover notes never reach the build context. A file
+a Dockerfile is meant to copy has to be added there too; `tests/test_docker.py` checks every
+`COPY` of both Dockerfiles against it.
+
+## The image of the MCP server
+
+| | |
+|---|---|
+| Base | `python:3.12.16-slim-trixie`, pinned by its digest as well, because slim tags are rebuilt in place. Python 3.12, as in the image of the service and in CI |
+| Code | `mcp/` and the packages of `requirements-mcp.txt` in `/app`, nothing of `app/` |
+| User | `contentgun`, uid 10001, created in the image |
+| Port | `8020` |
+| Health | `HEALTHCHECK` calls `/health` every 30 seconds; it answers without the service |
+| Start | `python mcp/remote_server.py`: a script start puts `mcp/` on the import path, which its flat imports need |
+
+The server keeps no state on disk, so the container needs no volume and can run with a read-only
+file system. Its settings come from the environment, see [mcp/remote.md](mcp/remote.md#settings).
+A new base image means a new tag and a new digest in the `FROM` line together:
+`docker buildx imagetools inspect python:3.12-slim-trixie` shows both.
+
+## The profile `remote`
+
+```
+docker compose -f compose.dev.yaml --profile storage --profile remote up --build
+```
+
+adds two services to the service and its storage:
+
+- **`mcp`**, the remote MCP server. Compose hands it its settings one by one instead of the whole
+  `.env`, so it sees neither `API_KEYS` nor the keys of the bucket. It reaches the service at
+  `http://assets:8010`, takes `INTERNAL_KEY` from the shell or `.env`, and defaults `MCP_MAIL` to
+  `console`: the codes appear in `docker compose -f compose.dev.yaml logs -f mcp`.
+- **`gateway`**, a Caddy on `127.0.0.1:8030` (`GATEWAY_PORT` moves it) that sends `/o/` and `/u/`
+  to the service and everything else to `mcp`, as `files.contentgun.de` and `mcp.contentgun.de`
+  will in production. One tunnel to the gateway therefore publishes the MCP server and the file
+  URLs, and nothing else of the service. While `mcp` restarts, the gateway holds requests for up to
+  ten seconds instead of failing them.
+
+`MCP_PUBLIC_URL` defaults to `PUBLIC_FILES_URL`, because behind the gateway both are the address
+of the tunnel. How to try it with claude.ai is in
+[mcp/remote.md](mcp/remote.md#trying-it-with-claudeai).
 
 ## Configuration
 
@@ -143,7 +185,22 @@ the Python 3.10 of Ubuntu 22.04 is below the floor of 3.11.
 ```
 docker build -f docker/assets.Dockerfile -t contentgun-assets .
 docker run --rm --init --shm-size=1g -p 127.0.0.1:8010:8010 --env-file .env -e BUNDLES_DIR= -e TENANTS_FILE= contentgun-assets
+docker build -f docker/mcp.Dockerfile -t contentgun-mcp .
 ```
+
+## Smoke test
+
+`bin/smoke` starts a built image, waits for `/health` and sends one request: the service renders
+a card of the built-in `demo` bundle, the MCP server answers `/mcp` without a token with `401` and
+the metadata claude.ai starts from. Both checks also make sure the container does not run as root.
+CI runs it after every build; locally:
+
+```
+bin/smoke assets contentgun-assets
+bin/smoke mcp contentgun-mcp
+```
+
+It publishes the container on `127.0.0.1:18080`; `SMOKE_PORT` moves it.
 
 Anywhere the container is reachable from outside the host, keep `DEBUG_ROUTES` off: the debug
 routes render arbitrary text without a key.

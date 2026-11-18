@@ -1,7 +1,9 @@
-# The image copies app/, bundles/ and requirements.txt only; add a path here when the Dockerfile copies more.
+# The images copy only what is listed here; add a path when a Dockerfile copies more.
 *
 !app/
 !bundles/
+!mcp/
 !requirements.txt
+!requirements-mcp.txt
 **/__pycache__
 **/.DS_Store

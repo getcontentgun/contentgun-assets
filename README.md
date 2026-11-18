@@ -96,7 +96,9 @@ docker compose -f compose.dev.yaml up --build
 Builds the image from `docker/assets.Dockerfile`, which carries the built-in bundles, and runs it on
 `127.0.0.1:8010` with the configuration from `.env`. Like `bin/development`, it takes another port
 of the host with `PORT`. Image, configuration, tenants in the container and the health check are
-described in [docs/docker.md](docs/docker.md).
+described in [docs/docker.md](docs/docker.md). The profile `remote` adds the remote MCP server from
+`docker/mcp.Dockerfile` and a gateway in front of both, for a test with claude.ai through one
+tunnel.
 
 ## Storage
 

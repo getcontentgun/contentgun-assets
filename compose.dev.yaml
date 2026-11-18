@@ -13,6 +13,8 @@ services:
       TENANTS_FILE: ""
       # 127.0.0.1 is the container itself; the storage of the profile below is "storage".
       S3_ENDPOINT: ${S3_ENDPOINT_IN_COMPOSE:-${S3_ENDPOINT:-}}
+      # Here, so that the address of a tunnel exported in the shell wins over the line in .env.
+      PUBLIC_FILES_URL: ${PUBLIC_FILES_URL:-}
     volumes:
       - ./bundles:/app/bundles:ro
     init: true
@@ -37,6 +39,46 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+
+  mcp:
+    build:
+      context: .
+      dockerfile: docker/mcp.Dockerfile
+    image: contentgun-mcp:dev
+    profiles: ["remote"]
+    # Named one by one instead of env_file: the server needs neither API_KEYS nor the keys of
+    # the bucket. Compose takes the values from the shell, then from .env.
+    environment:
+      MCP_PUBLIC_URL: ${MCP_PUBLIC_URL:-${PUBLIC_FILES_URL:-}}
+      MCP_SECRET: ${MCP_SECRET:-}
+      ASSETS_BASE_URL: http://assets:8010
+      INTERNAL_KEY: ${INTERNAL_KEY:-}
+      MCP_EMAILS: ${MCP_EMAILS:-}
+      MCP_MAIL: ${MCP_MAIL:-console}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-}
+      SMTP_SECURITY: ${SMTP_SECURITY:-}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      MAIL_FROM: ${MAIL_FROM:-}
+      MCP_SESSIONS_AFTER: ${MCP_SESSIONS_AFTER:-}
+      MCP_ACCESS_MINUTES: ${MCP_ACCESS_MINUTES:-}
+      MCP_REDIRECT_URIS: ${MCP_REDIRECT_URIS:-}
+    depends_on:
+      assets:
+        condition: service_healthy
+    init: true
+
+  gateway:
+    image: caddy:2.11.9-alpine@sha256:003a97808e781aa9f7e75cc2f43d34d461099031faf5e20faefb9f61126836f0
+    profiles: ["remote"]
+    ports:
+      - "127.0.0.1:${GATEWAY_PORT:-8030}:8080"
+    volumes:
+      - ./docker/gateway.Caddyfile:/etc/caddy/Caddyfile:ro
+    depends_on:
+      - assets
+      - mcp
 
 volumes:
   storage:

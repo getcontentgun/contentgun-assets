@@ -1,0 +1,21 @@
+# The gateway of the compose profile "remote": one address for claude.ai, so a single tunnel
+# publishes the MCP server and the file URLs of the service, and nothing else of the service.
+{
+	auto_https off
+	admin off
+}
+
+:8080 {
+	@files path /o/* /u/*
+	handle @files {
+		reverse_proxy assets:8010
+	}
+
+	handle {
+		# While the MCP server restarts, requests wait for it instead of failing.
+		reverse_proxy mcp:8020 {
+			lb_try_duration 10s
+			lb_try_interval 250ms
+		}
+	}
+}

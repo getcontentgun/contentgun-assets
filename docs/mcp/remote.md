@@ -161,6 +161,45 @@ without a token. claude.ai only reaches a public `https://` address; a tunnel su
 `cloudflared tunnel --url http://127.0.0.1:8020` gives one, and `MCP_PUBLIC_URL` must then be the
 address of the tunnel.
 
+## In a container
+
+`docker/mcp.Dockerfile` builds the image, and the compose profile `remote` runs it next to the
+service, behind a gateway that also serves the file URLs, see
+[../docker.md](../docker.md#the-profile-remote).
+
+## Trying it with claude.ai
+
+claude.ai reaches only a public `https://` address. Locally, a tunnel to the gateway of the
+profile `remote` gives one, for the MCP server and the file URLs together. The service needs its
+storage, and `.env` its storage settings and `INTERNAL_KEY`.
+
+1. Start the tunnel and note its address, `https://<name>.trycloudflare.com`:
+
+   ```
+   cloudflared tunnel --url http://127.0.0.1:8030
+   ```
+
+2. Start everything with that address. `MCP_SECRET` stays the same for the whole session, so a
+   restart of `mcp` keeps everybody signed in:
+
+   ```
+   export PUBLIC_FILES_URL=https://<name>.trycloudflare.com MCP_SECRET="$(openssl rand -hex 32)" MCP_EMAILS=you@example.com S3_ENDPOINT_IN_COMPOSE=http://storage:9000
+   docker compose -f compose.dev.yaml --profile storage --profile remote up --build
+   ```
+
+3. In claude.ai, add a custom connector with `https://<name>.trycloudflare.com/mcp`, connect, and
+   type the address. The code is in the log:
+
+   ```
+   docker compose -f compose.dev.yaml logs -f mcp
+   ```
+
+4. For uploads from the chat, add `<name>.trycloudflare.com` under "Additional allowed domains"
+   in the capabilities of Claude.
+
+The address of a quick tunnel changes with every start of `cloudflared`: then export the new one,
+start compose again, and change the URL of the connector.
+
 ## Operation
 
 - **One process.** A sign-in in progress and the authorization code at its end live in memory.

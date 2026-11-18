@@ -7,6 +7,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PIP_ROOT_USER_ACTION=ignore
 
+LABEL org.opencontainers.image.source="https://github.com/getcontentgun/contentgun-assets"
+
 WORKDIR /app
 
 COPY requirements.txt .
