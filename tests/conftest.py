@@ -327,6 +327,28 @@ async def storage_client(storage_app, storage):
         yield instance
 
 
+def pytest_addoption(parser):
+    parser.addoption(
+        "--require-chromium",
+        action="store_true",
+        help="Fail a test marked requires_chromium instead of skipping it.",
+    )
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_makereport(item, call):
+    outcome = yield
+    report = outcome.get_result()
+    if (
+        report.skipped
+        and item.config.getoption("--require-chromium")
+        and item.get_closest_marker("requires_chromium")
+    ):
+        reason = report.longrepr[2] if isinstance(report.longrepr, tuple) else report.longrepr
+        report.outcome = "failed"
+        report.longrepr = f"Skipped although --require-chromium is set: {reason}"
+
+
 MISSING_BROWSER_MARKERS = (
     "executable doesn't exist",
     "please run the following command to download new browsers",

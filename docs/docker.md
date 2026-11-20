@@ -204,3 +204,21 @@ It publishes the container on `127.0.0.1:18080`; `SMOKE_PORT` moves it.
 
 Anywhere the container is reachable from outside the host, keep `DEBUG_ROUTES` off: the debug
 routes render arbitrary text without a key.
+
+## CI and releases
+
+`.github/workflows/ci.yml` runs three jobs:
+
+| Job | When | What |
+|---|---|---|
+| `test` | every push and pull request | ruff and the suite in the Playwright image of the pin, so on Linux with the Chromium of production; `--require-chromium` turns a skipped render test into a failure |
+| `images` | pushes to `main`, pull requests | builds both images and runs `bin/smoke` on them, publishes nothing |
+| `release` | a tag `vX.Y.Z`, after `test` | checks that the tag equals `__version__` in `app/__init__.py` and that neither image of that version exists, builds both for `linux/amd64`, runs `bin/smoke` and pushes `ghcr.io/getcontentgun/assets:X.Y.Z` and `ghcr.io/getcontentgun/mcp:X.Y.Z` |
+
+There is no `latest`: a deployment names its version. One version number covers both images, and
+`tests/test_mcp_remote_server.py` keeps `mcp/version.py` equal to `app/__init__.py`. A release is a
+version bump in both files, a commit and the tag `vX.Y.Z` pushed to GitHub. Only `release` may
+write packages, and every action is pinned by its commit, which `tests/test_ci.py` checks.
+
+GHCR creates both packages private on the first push. Set them to public once in the package
+settings on GitHub, or the server needs a `docker login ghcr.io` before it can pull.

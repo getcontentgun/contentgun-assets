@@ -71,6 +71,7 @@ or the setting; a missing Chromium fails when the lifespan starts.
 | `mcp/` | Two MCP servers, both clients of the HTTP API: the local stdio server for the Claude desktop app, never deployed, and the remote server that claude.ai connects to, with OAuth and a sign-in by mail (`remote_server.py`). A plain folder, not a package. See `docs/mcp/README.md` and `docs/mcp/remote.md` |
 | `bin/test` | Linters and the test suite as stages, with a summary and `--lint`/`--suite`/`--bail` |
 | `bin/smoke` | Starts a built image of the service or the MCP server, waits for `/health` and sends one request; for CI and local checks |
+| `.github/workflows/ci.yml` | The suite in the Playwright image, both images built and smoke-tested, and on a tag `vX.Y.Z` both pushed to GHCR. See `docs/docker.md` |
 | `docker/assets.Dockerfile` | The image of the service, on Microsoft's Playwright image, with the built-in bundles and no bundle of a tenant. See `docs/docker.md` |
 | `docker/mcp.Dockerfile` | The image of the remote MCP server, on `python:3.12-slim` pinned by digest, with `mcp/` only |
 | `docker/gateway.Caddyfile` | The Caddy of the compose profile `remote`: `/o/` and `/u/` to the service, the rest to the MCP server |

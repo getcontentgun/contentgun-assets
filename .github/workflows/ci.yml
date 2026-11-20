@@ -1,0 +1,81 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref_type != 'tag' }}
+
+env:
+  REGISTRY: ghcr.io/getcontentgun
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    container:
+      image: mcr.microsoft.com/playwright/python:v1.62.0-noble
+      options: --shm-size=1g
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: python -m pip install -r requirements-dev.txt
+      - run: python -m ruff check .
+      - run: python -m ruff format --check .
+      - run: python -m pytest -q --require-chromium
+
+  images:
+    if: github.ref_type != 'tag'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: docker build -f docker/assets.Dockerfile -t contentgun-assets .
+      - run: docker build -f docker/mcp.Dockerfile -t contentgun-mcp .
+      - run: bin/smoke assets contentgun-assets
+      - run: bin/smoke mcp contentgun-mcp
+
+  release:
+    if: github.ref_type == 'tag'
+    needs: test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: The tag names the version of the code
+        run: |
+          version="$(sed -n 's/^__version__ = "\(.*\)"$/\1/p' app/__init__.py)"
+          if [[ "${GITHUB_REF_NAME}" != "v${version}" ]]; then
+            echo "The tag ${GITHUB_REF_NAME} does not match the version ${version} in app/__init__.py." >&2
+            exit 1
+          fi
+          echo "VERSION=${version}" >> "${GITHUB_ENV}"
+      - name: Log in to GHCR
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ACTOR: ${{ github.actor }}
+        run: echo "${TOKEN}" | docker login ghcr.io -u "${ACTOR}" --password-stdin
+      - name: The version is not published yet
+        run: |
+          for name in assets mcp; do
+            if docker manifest inspect "${REGISTRY}/${name}:${VERSION}" >/dev/null 2>&1; then
+              echo "${REGISTRY}/${name}:${VERSION} exists already." >&2
+              exit 1
+            fi
+          done
+      - run: docker build --platform linux/amd64 -f docker/assets.Dockerfile -t "${REGISTRY}/assets:${VERSION}" .
+      - run: docker build --platform linux/amd64 -f docker/mcp.Dockerfile -t "${REGISTRY}/mcp:${VERSION}" .
+      - run: bin/smoke assets "${REGISTRY}/assets:${VERSION}"
+      - run: bin/smoke mcp "${REGISTRY}/mcp:${VERSION}"
+      - run: |
+          docker push "${REGISTRY}/assets:${VERSION}"
+          docker push "${REGISTRY}/mcp:${VERSION}"
