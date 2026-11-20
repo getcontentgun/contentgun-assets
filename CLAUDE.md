@@ -26,6 +26,7 @@ bin/test --suite -k render                        # pytest only
 docker compose -f compose.dev.yaml up --build     # the service in a container
 docker compose -f compose.dev.yaml --profile storage --profile remote up --build   # with the MCP server and its gateway
 bin/smoke assets <image>                          # start a built image and send one request
+bin/release                                       # bump the version, test, tag; CI publishes both images
 python3 scripts/new_api_key.py                    # a key and its hash for the tenants file
 docker compose -f compose.dev.yaml --profile storage up -d storage   # RustFS on 127.0.0.1:9010
 .venv/bin/python scripts/setup_storage.py         # create the bucket, set its lifecycle rules

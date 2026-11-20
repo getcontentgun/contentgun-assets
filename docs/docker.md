@@ -216,9 +216,12 @@ routes render arbitrary text without a key.
 | `release` | a tag `vX.Y.Z`, after `test` | checks that the tag equals `__version__` in `app/__init__.py` and that neither image of that version exists, builds both for `linux/amd64`, runs `bin/smoke` and pushes `ghcr.io/getcontentgun/assets:X.Y.Z` and `ghcr.io/getcontentgun/mcp:X.Y.Z` |
 
 There is no `latest`: a deployment names its version. One version number covers both images, and
-`tests/test_mcp_remote_server.py` keeps `mcp/version.py` equal to `app/__init__.py`. A release is a
-version bump in both files, a commit and the tag `vX.Y.Z` pushed to GitHub. Only `release` may
-write packages, and every action is pinned by its commit, which `tests/test_ci.py` checks.
+`tests/test_mcp_remote_server.py` keeps `mcp/version.py` equal to `app/__init__.py`. A release is
+`bin/release`: it sets the version in both files and in `docs/health.md`, runs `bin/test`, commits,
+pushes `main`, pushes the tag `vX.Y.Z` and follows `release` until both images are in GHCR,
+asking before every step that changes the repository. `bin/deploy` in `contentgun-infra` then
+puts the version on the server. Only `release` may write packages, and every action is pinned by
+its commit, which `tests/test_ci.py` checks.
 
 GHCR creates both packages private on the first push. Set them to public once in the package
 settings on GitHub, or the server needs a `docker login ghcr.io` before it can pull.

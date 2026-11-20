@@ -1,0 +1,101 @@
+#!/usr/bin/env bash
+#
+# Releases a version: sets it in every file that names it, runs bin/test, commits, pushes main,
+# tags vX.Y.Z and follows the workflow ci until both images are in GHCR. Asks before every step
+# that changes the repository. Deploying the version is bin/deploy in contentgun-infra.
+#
+# Usage: bin/release [X.Y.Z]
+
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+
+readonly version_files=(app/__init__.py mcp/version.py docs/health.md)
+
+fail() {
+    echo "release: $*" >&2
+    exit 1
+}
+
+confirm() {
+    local answer
+    while true; do
+        read -r -p "$1 [Y/n]: " answer
+        case "${answer:-Y}" in
+            y | Y) return 0 ;;
+            n | N) return 1 ;;
+        esac
+    done
+}
+
+command -v gh >/dev/null || fail "needs the GitHub CLI, gh."
+
+[[ "$(git branch --show-current)" == main ]] || fail "releases are made from main."
+git fetch --quiet origin main --tags
+[[ -z "$(git rev-list HEAD..origin/main)" ]] || fail "main is behind origin/main. Pull first."
+
+dirty="$(git status --porcelain --untracked-files=no | cut -c4-)"
+for file in ${dirty}; do
+    case " ${version_files[*]} " in
+        *" ${file} "*) ;;
+        *) fail "${file} has uncommitted changes. Commit or discard them first." ;;
+    esac
+done
+
+current="$(sed -n 's/^__version__ = "\(.*\)"$/\1/p' app/__init__.py)"
+latest="$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' | sed 's/^v//' | sort -t. -k1,1n -k2,2n -k3,3n | tail -1)"
+latest="${latest:-0.0.0}"
+if [[ "${current}" != "${latest}" ]]; then
+    suggested="${current}"
+else
+    IFS=. read -r major minor patch <<<"${latest}"
+    suggested="${major}.${minor}.$((patch + 1))"
+fi
+
+echo "Version in the code: ${current}"
+echo "Latest release:      v${latest}"
+version="${1:-}"
+if [[ -z "${version}" ]]; then
+    read -r -p "Version to release [${suggested}]: " version
+    version="${version:-${suggested}}"
+fi
+[[ "${version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || fail "${version} is not a version of the form X.Y.Z."
+git rev-parse -q --verify "refs/tags/v${version}" >/dev/null && fail "the tag v${version} exists already."
+
+confirm "Release ${version}?" || exit 0
+
+perl -pi -e "s/^__version__ = \".*\"\$/__version__ = \"${version}\"/" app/__init__.py mcp/version.py
+perl -pi -e "s/\"version\": \"[0-9]+\.[0-9]+\.[0-9]+\"/\"version\": \"${version}\"/" docs/health.md
+for file in app/__init__.py mcp/version.py docs/health.md; do
+    grep -q "${version}" "${file}" || fail "could not set the version in ${file}."
+done
+
+echo
+bin/test || fail "bin/test failed. The version files keep ${version}; fix the findings and run bin/release again."
+
+echo
+git --no-pager diff --stat -- "${version_files[@]}"
+if [[ -n "$(git status --porcelain --untracked-files=no -- "${version_files[@]}")" ]]; then
+    confirm "Commit \"chore: release ${version}\" and push main?" || exit 0
+    git commit --quiet -m "chore: release ${version}" -- "${version_files[@]}"
+fi
+git push --quiet origin main
+
+confirm "Tag v${version} and push the tag? This publishes both images." || exit 0
+git tag "v${version}"
+git push --quiet origin "v${version}"
+
+echo
+echo "Waiting for the workflow ci of v${version}..."
+run=""
+for _ in $(seq 1 20); do
+    run="$(gh run list --workflow ci.yml --branch "v${version}" --limit 1 --json databaseId --jq '.[0].databaseId // empty')"
+    [[ -n "${run}" ]] && break
+    sleep 3
+done
+[[ -n "${run}" ]] || fail "no run of ci for v${version} showed up. Check the Actions tab."
+gh run watch "${run}" --exit-status --interval 10 || fail "the release of v${version} failed: gh run view ${run} --log-failed"
+
+echo
+echo "Released ${version}: ghcr.io/getcontentgun/assets:${version} and ghcr.io/getcontentgun/mcp:${version}."
+echo "Deploy it from contentgun-infra: bin/deploy ${version}"
