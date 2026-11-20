@@ -286,7 +286,7 @@ async def test_a_message_of_the_service_becomes_the_tool_error():
         (httpx.Response(401, json={"ok": False, "error": "Unauthorized."}), REMOTE.rejected),
         (
             httpx.Response(500, text="boom"),
-            "The Contentgun service answered unexpectedly, with HTTP 500.",
+            "The ContentGun service answered unexpectedly, with HTTP 500.",
         ),
         (None, REMOTE.unreachable),
     ],

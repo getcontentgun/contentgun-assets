@@ -24,7 +24,7 @@ VALID = {
 SMTP = {
     "MCP_MAIL": "smtp",
     "SMTP_HOST": "smtp.example",
-    "MAIL_FROM": "Contentgun <login@contentgun.de>",
+    "MAIL_FROM": "ContentGun <login@contentgun.de>",
 }
 
 
@@ -158,7 +158,7 @@ def test_smtp_takes_starttls_on_587_by_default():
         "starttls",
     )
     assert config.smtp.user is None
-    assert config.mail_from == "Contentgun <login@contentgun.de>"
+    assert config.mail_from == "ContentGun <login@contentgun.de>"
 
 
 def test_smtp_with_tls_takes_465_and_an_explicit_port_wins():
@@ -175,7 +175,7 @@ def test_smtp_with_tls_takes_465_and_an_explicit_port_wins():
         ({"SMTP_USER": "login"}, "SMTP_USER and SMTP_PASSWORD go together"),
         ({"SMTP_PASSWORD": "secret"}, "SMTP_USER and SMTP_PASSWORD go together"),
         ({"MAIL_FROM": ""}, "MAIL_FROM is not set."),
-        ({"MAIL_FROM": "Contentgun"}, "MAIL_FROM must be a sender address"),
+        ({"MAIL_FROM": "ContentGun"}, "MAIL_FROM must be a sender address"),
         ({"MAIL_FROM": "a@b.example\nBcc: c@d.example"}, "MAIL_FROM must be a sender address"),
     ],
 )

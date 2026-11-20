@@ -54,7 +54,7 @@ KEEP_ALIVE_S = 130
 QUIET_LOGGERS = ("httpx", "mcp")
 
 INSTRUCTIONS = """\
-Contentgun renders social media cards and Instagram carousels with the templates of the \
+ContentGun renders social media cards and Instagram carousels with the templates of the \
 signed-in team. list_templates shows the templates and their fields. render_card renders one \
 card, render_carousel a whole carousel; both return URLs and a preview image: look at the \
 preview before you report the result, and give the user the URLs. To put an image file from the \
@@ -161,7 +161,7 @@ def _content(result: Result) -> list[str | Image]:
 
 def _add_tools(server: MCPServer, tools: RemoteTools) -> None:
     @server.tool(
-        description="Show which address and team are signed in to Contentgun, and until when.",
+        description="Show which address and team are signed in to ContentGun, and until when.",
         annotations=WHOAMI,
         structured_output=True,
     )
@@ -328,7 +328,7 @@ def build_app(
     provider = Provider(config, accounts, logins, clock)
     server = MCPServer(
         "contentgun",
-        title="Contentgun",
+        title="ContentGun",
         instructions=INSTRUCTIONS,
         version=__version__,
         log_level="WARNING",
@@ -363,7 +363,7 @@ def build_app(
 
 
 def main(argv: Sequence[str] | None = None) -> None:
-    parser = argparse.ArgumentParser(description="The remote MCP server of Contentgun.")
+    parser = argparse.ArgumentParser(description="The remote MCP server of ContentGun.")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=DEFAULT_PORT)
     arguments = parser.parse_args(argv)

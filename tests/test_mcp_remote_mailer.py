@@ -50,8 +50,8 @@ def fake_smtp(monkeypatch):
 def message() -> EmailMessage:
     mail = EmailMessage()
     mail["To"] = ADDRESS
-    mail["From"] = "Contentgun <login@contentgun.test>"
-    mail["Subject"] = "Your Contentgun sign-in code"
+    mail["From"] = "ContentGun <login@contentgun.test>"
+    mail["Subject"] = "Your ContentGun sign-in code"
     mail.set_content("Your code: 1234 5678\n")
     return mail
 

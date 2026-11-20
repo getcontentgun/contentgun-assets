@@ -2,7 +2,7 @@
 
 ## What this is
 
-The asset module of Contentgun: a FastAPI service that renders social media cards to PNG, and
+The asset module of ContentGun: a FastAPI service that renders social media cards to PNG, and
 carousels to one PDF. A request carries text, the service fills a Jinja2 HTML template, loads it
 into headless Chromium and screenshots it. There is no AI in the rendering path, and without
 storage nothing is stored: the PNG is the response body. With an S3-compatible bucket the service

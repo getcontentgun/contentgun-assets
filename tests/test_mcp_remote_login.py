@@ -30,7 +30,7 @@ async def test_the_login_page_names_claude_and_asks_for_the_address():
         _, _, txn = await start(remote)
         response = await remote.client.get("/login", params={"txn": txn})
     assert response.status_code == 200
-    assert "Claude (claude.ai) wants to connect to Contentgun" in response.text
+    assert "Claude (claude.ai) wants to connect to ContentGun" in response.text
     assert 'name="email"' in response.text
     assert '<html lang="en">' in response.text
 
@@ -99,10 +99,10 @@ async def test_a_known_address_gets_one_mail_with_the_code_in_the_language_of_th
     [message] = remote.outbox.messages
     body = message.get_content()
     assert message["To"] == ADDRESS
-    assert message["Subject"] == "Ihr Anmeldecode für Contentgun"
+    assert message["Subject"] == "Ihr Anmeldecode für ContentGun"
     assert not re.search(r"\d", message["Subject"])
     assert message["Auto-Submitted"] == "auto-generated"
-    assert "Claude (claude.ai) möchte sich mit Contentgun verbinden" in body
+    assert "Claude (claude.ai) möchte sich mit ContentGun verbinden" in body
     assert re.search(r"Ihr Code: \d{4} \d{4}", body)
     assert f"Kennung der Anmeldung: {reference}" in body
     assert re.search(r"gilt bis \d\d:\d\d UTC", body)

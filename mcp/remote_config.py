@@ -23,7 +23,7 @@ CLAUDE_CALLBACKS = (
     "https://claude.com/api/mcp/auth_callback",
 )
 SMTP_PORTS = {"starttls": 587, "tls": 465}
-CONSOLE_SENDER = "Contentgun <sign-in@contentgun.invalid>"
+CONSOLE_SENDER = "ContentGun <sign-in@contentgun.invalid>"
 LOOPBACK_HOSTS = ("localhost", "127.0.0.1", "::1")
 
 
@@ -163,7 +163,7 @@ def _mail_from(value: str) -> str:
     _, address = parseaddr(value)
     if "\r" in value or "\n" in value or not is_address(normalize(address)):
         raise ConfigError(
-            "MAIL_FROM must be a sender address, such as 'Contentgun <login@contentgun.de>'."
+            "MAIL_FROM must be a sender address, such as 'ContentGun <login@contentgun.de>'."
         )
     return value
 

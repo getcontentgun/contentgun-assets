@@ -26,21 +26,21 @@ NO_STORE = {"Cache-Control": "no-store"}
 
 TEXTS = {
     "de": {
-        "sign_in": "Bei Contentgun anmelden",
+        "sign_in": "Bei ContentGun anmelden",
         "intro": (
-            "{client} möchte sich mit Contentgun verbinden. Danach kann Claude Karten mit den "
+            "{client} möchte sich mit ContentGun verbinden. Danach kann Claude Karten mit den "
             "Vorlagen Ihres Teams rendern und Bilder dafür hochladen."
         ),
         "address": "E-Mail-Adresse",
         "address_hint": (
-            "Die Adresse, die für Ihr Team bei Contentgun hinterlegt ist. Sie bekommen einen "
+            "Die Adresse, die für Ihr Team bei ContentGun hinterlegt ist. Sie bekommen einen "
             "Code per Mail."
         ),
         "request": "Code anfordern",
         "not_an_address": "Das ist keine gültige E-Mail-Adresse.",
         "enter_code": "Code eingeben",
         "sent": (
-            "Ist {address} bei Contentgun hinterlegt, kommt in einer Minute eine Mail mit einem "
+            "Ist {address} bei ContentGun hinterlegt, kommt in einer Minute eine Mail mit einem "
             "Code."
         ),
         "reference": "Kennung dieser Anmeldung: {reference}. Dieselbe Kennung steht in der Mail.",
@@ -62,10 +62,10 @@ TEXTS = {
         ),
         "imprint": "Impressum",
         "privacy": "Datenschutz",
-        "mail_subject": "Ihr Anmeldecode für Contentgun",
+        "mail_subject": "Ihr Anmeldecode für ContentGun",
         "mail_body": (
             "Guten Tag,\n\n"
-            "{client} möchte sich mit Contentgun verbinden und hat dafür diese Adresse "
+            "{client} möchte sich mit ContentGun verbinden und hat dafür diese Adresse "
             "angegeben. Mit dem Code darf Claude danach Karten mit den Vorlagen Ihres Teams "
             "rendern und Bilder dafür hochladen.\n\n"
             "Ihr Code: {code}\n\n"
@@ -73,26 +73,26 @@ TEXTS = {
             "Der Code gilt bis {time} UTC und nur in dem Fenster, in dem die Anmeldung begonnen "
             "hat. Dort steht dieselbe Kennung.\n\n"
             "Geben Sie den Code niemals weiter, auch nicht an jemanden, der sich als "
-            "Contentgun ausgibt. Haben Sie die Anmeldung nicht selbst begonnen, ignorieren Sie "
+            "ContentGun ausgibt. Haben Sie die Anmeldung nicht selbst begonnen, ignorieren Sie "
             "diese Mail.\n\n"
-            "Contentgun\n"
+            "ContentGun\n"
         ),
     },
     "en": {
-        "sign_in": "Sign in to Contentgun",
+        "sign_in": "Sign in to ContentGun",
         "intro": (
-            "{client} wants to connect to Contentgun. Claude can then render cards with your "
+            "{client} wants to connect to ContentGun. Claude can then render cards with your "
             "team's templates and upload images for them."
         ),
         "address": "Email address",
         "address_hint": (
-            "The address your team has on file with Contentgun. You will get a code by mail."
+            "The address your team has on file with ContentGun. You will get a code by mail."
         ),
         "request": "Send me a code",
         "not_an_address": "This is not a valid email address.",
         "enter_code": "Enter your code",
         "sent": (
-            "If {address} is on file with Contentgun, a mail with a code arrives within a minute."
+            "If {address} is on file with ContentGun, a mail with a code arrives within a minute."
         ),
         "reference": "Reference of this sign-in: {reference}. The mail shows the same reference.",
         "code": "Code from the mail",
@@ -110,19 +110,19 @@ TEXTS = {
         "invalid": "The form did not arrive complete. Start the connection in Claude again.",
         "imprint": "Legal notice",
         "privacy": "Privacy",
-        "mail_subject": "Your Contentgun sign-in code",
+        "mail_subject": "Your ContentGun sign-in code",
         "mail_body": (
             "Hello,\n\n"
-            "{client} wants to connect to Contentgun and gave this address. With the code, "
+            "{client} wants to connect to ContentGun and gave this address. With the code, "
             "Claude may then render cards with your team's templates and upload images for "
             "them.\n\n"
             "Your code: {code}\n\n"
             "Sign-in reference: {reference}\n"
             "The code works until {time} UTC, and only in the window where the sign-in began. "
             "That window shows the same reference.\n\n"
-            "Never pass the code on, not even to someone who claims to be Contentgun. If you "
+            "Never pass the code on, not even to someone who claims to be ContentGun. If you "
             "did not start this sign-in, ignore this mail.\n\n"
-            "Contentgun\n"
+            "ContentGun\n"
         ),
     },
 }
@@ -160,12 +160,12 @@ LAYOUT = """\
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{title} · Contentgun</title>
+<title>{title} · ContentGun</title>
 <link rel="stylesheet" href="/login/style.css">
 </head>
 <body>
 <main>
-<p class="brand">Contentgun</p>
+<p class="brand">ContentGun</p>
 <h1>{title}</h1>
 {body}
 </main>

@@ -53,7 +53,7 @@ def remote_config(**changes: Any) -> RemoteConfig:
         "tenants_file": None,
         "emails": (ADDRESS,),
         "smtp": None,
-        "mail_from": "Contentgun <login@contentgun.test>",
+        "mail_from": "ContentGun <login@contentgun.test>",
         "sessions_after": None,
         "access_minutes": 60,
         "redirect_uris": CLAUDE_CALLBACKS,

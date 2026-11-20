@@ -73,7 +73,7 @@ sets itself, such as `template`, `image` or `output`.
 
 A message of the service comes through as the tool's error, with the hint the local server gives
 for its status. A failure of the service itself names no internal address: it says that the
-Contentgun service did not answer, cannot be reached, refused the connector, or answered
+ContentGun service did not answer, cannot be reached, refused the connector, or answered
 unexpectedly. In a carousel, the error names the slide; the slides rendered before it stay stored
 until they expire.
 
@@ -139,7 +139,7 @@ The server reads its settings from the environment only, never from `.env`.
 | `SMTP_PORT` | no | Default 587 with `starttls`, 465 with `tls` |
 | `SMTP_SECURITY` | no | `starttls` (default) or `tls`. The certificate is always verified, and nothing is sent unencrypted |
 | `SMTP_USER`, `SMTP_PASSWORD` | no | Both or neither |
-| `MAIL_FROM` | with smtp | The sender, such as `Contentgun <login@contentgun.de>` |
+| `MAIL_FROM` | with smtp | The sender, such as `ContentGun <login@contentgun.de>` |
 | `MCP_SESSIONS_AFTER` | no | A moment with a time zone, such as `2026-11-18T12:00:00Z`. Sign-ins before it are no longer valid |
 | `MCP_ACCESS_MINUTES` | no | Lifetime of an access token, 1 to 1440, default 60 |
 | `MCP_REDIRECT_URIS` | no | Further allowed callbacks, `https://` addresses, comma-separated |

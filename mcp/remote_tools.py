@@ -23,10 +23,10 @@ from preview import contact_sheet, preview_jpeg
 logger = logging.getLogger(__name__)
 
 REMOTE = Wording(
-    timeout="The Contentgun service did not answer within {seconds:g} seconds. Retrying is safe.",
-    unreachable="The Contentgun service cannot be reached right now. Retrying in a minute is safe.",
-    rejected="The Contentgun service refused this connector; its operator has to fix that.",
-    unexpected="The Contentgun service answered unexpectedly, with HTTP {status}.",
+    timeout="The ContentGun service did not answer within {seconds:g} seconds. Retrying is safe.",
+    unreachable="The ContentGun service cannot be reached right now. Retrying in a minute is safe.",
+    rejected="The ContentGun service refused this connector; its operator has to fix that.",
+    unexpected="The ContentGun service answered unexpectedly, with HTTP {status}.",
 )
 
 # Every key of RESERVED_KEYS in app/schemas.py: extra_fields setting output, for instance, would
