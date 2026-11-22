@@ -6,6 +6,23 @@
   --color-muted: #9aabbc;
   --color-line: rgba(154, 171, 188, 0.35);
 
+  --color-code-background: #16202a;
+  --color-code-bar: #233140;
+  --color-code-text: #e6e1d6;
+  --color-code-line-number: #627487;
+  --color-code-highlight: rgba(242, 179, 61, 0.14);
+  --color-code-keyword: #f2b33d;
+  --color-code-string: #a3d39c;
+  --color-code-number: #f4a582;
+  --color-code-comment: #7f91a3;
+  --color-code-function: #8fc3ee;
+  --color-code-type: #7fd1c4;
+  --color-code-builtin: #c9a9ef;
+  --color-code-decorator: #ee9fc4;
+  --color-code-operator: #c5cfd9;
+  --color-code-inserted: #a3d39c;
+  --color-code-deleted: #f08c82;
+
   --padding-x: 96px;
   --padding-top: 80px;
   --padding-bottom: 96px;

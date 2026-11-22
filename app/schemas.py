@@ -30,6 +30,8 @@ class RenderRequest(BaseModel):
     # Neither is fitted, so their worst case at these caps is part of the quote's room.
     author: str | None = Field(default=None, max_length=60)
     role: str | None = Field(default=None, max_length=80)
+    # Never wrapped, so this cap is what keeps it inside the bar of the code's window.
+    filename: str | None = Field(default=None, max_length=60)
     # Deliberately uncapped here: the size is checked in bytes by app/images.py, and the
     # field length limit that applies to template fields would reject any real image.
     image: str | None = None

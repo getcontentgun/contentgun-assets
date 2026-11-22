@@ -10,11 +10,12 @@ a font without re-checking would break that quietly, since the endpoint still an
 import pytest
 import pytest_asyncio
 
+from app.code import MAX_CODE_COLUMNS, MAX_CODE_LINES, check_code
 from app.formats import Format, dimensions
 from app.rendering import resolve_fields, resolve_template
 from app.schemas import MAX_FIELD_LENGTH, RenderRequest
 from app.templating import TemplateRegistry
-from tests.conftest import BUILTIN_DIR, CONTENT, QUOTE, image_base64, svg_base64
+from tests.conftest import BUILTIN_DIR, CODE, CONTENT, QUOTE, image_base64, svg_base64
 
 pytestmark = [pytest.mark.requires_chromium, pytest.mark.asyncio(loop_scope="module")]
 
@@ -101,9 +102,10 @@ WITH_PAGINATION = [
 ]
 CONTENT_FORMATS = REGISTRY.get(CONTENT).formats
 QUOTE_FORMATS = REGISTRY.get(QUOTE).formats
-# Fields that are not running text: the handle and the pagination never wrap, and icon_color
-# picks a color.
-NOT_TEXT = frozenset({"handle", "pagination", "icon_color"})
+CODE_FORMATS = REGISTRY.get(CODE).formats
+# Fields that are not running text: the handle, the pagination and the file name never wrap, and
+# icon_color picks a color.
+NOT_TEXT = frozenset({"handle", "pagination", "filename", "icon_color"})
 
 HEADLINE_READABLE = 45
 COPY_READABLE = 26
@@ -114,6 +116,22 @@ GRAPHICS = {
     "tall-image": {"image": f"data:image/png;base64,{image_base64((600, 3000))}"},
 }
 PORTRAIT = f"data:image/png;base64,{image_base64((400, 400))}"
+
+# Every character of a monospace font is as wide as any other, so a block of W at both caps is
+# the most code a card holds; line numbers widen it further.
+FULL_CODE = "\n".join(["W" * MAX_CODE_COLUMNS] * MAX_CODE_LINES)
+CODES = {
+    "numbered": check_code(FULL_CODE, line_numbers=True, highlight_lines=[1]),
+    "plain": check_code(FULL_CODE),
+    "short": check_code("print('Hallo')", "python"),
+}
+
+FILENAME_PROBE = """
+() => {
+  const filename = document.querySelector('.filename');
+  return filename.scrollWidth > filename.clientWidth + 1;
+}
+"""
 
 # hyphenate() chops a run without break points every 12 characters, and at the floor sizes a
 # chunk of these capitals fills a line on its own, so they are the tallest text a field holds.
@@ -217,10 +235,13 @@ async def load(
     requested: dict,
     image: str | None = None,
     icon: str | None = None,
+    code: str = "numbered",
 ) -> None:
+    """A template with code always gets the most code a card holds, named in CODES."""
     spec = resolve_template(registry, template)
     fields = resolve_fields(spec, requested)
-    html = registry.render_html(spec, fmt, fields, image=image, icon=icon)
+    block = CODES[code] if spec.accepts_code else None
+    html = registry.render_html(spec, fmt, fields, image=image, icon=icon, code=block)
     width, height = dimensions(fmt)
     await page.set_viewport_size({"width": width, "height": height})
     await page.set_content(html, wait_until="load")
@@ -234,10 +255,16 @@ async def measure(
     fmt: Format,
     image: str | None = None,
     icon: str | None = None,
+    code: str = "numbered",
     **requested,
 ):
-    await load(page, registry, template, fmt, requested, image=image, icon=icon)
-    return await page.evaluate(OVERFLOW_PROBE, list(requested))
+    await load(page, registry, template, fmt, requested, image=image, icon=icon, code=code)
+    return await page.evaluate(OVERFLOW_PROBE, [*requested, "code"])
+
+
+def assert_code_fits(result: dict, template: str) -> None:
+    if REGISTRY.get(template).accepts_code:
+        assert_fits(result["code"])
 
 
 async def test_template_driven_field_cap_matches_the_schema():
@@ -253,6 +280,7 @@ async def test_running_text_at_every_limit_fits_and_stays_readable(page, registr
     result = await measure(page, registry, template, fmt, **requested)
     assert_fits(result["headline"], HEADLINE_READABLE)
     assert_copy_fits(result, template, COPY_READABLE)
+    assert_code_fits(result, template)
     assert_stage_holds(result)
 
 
@@ -284,6 +312,7 @@ async def test_unbroken_runs_at_every_limit_are_not_clipped(page, registry, temp
     result = await measure(page, registry, template, fmt, **requested)
     assert_fits(result["headline"])
     assert_copy_fits(result, template)
+    assert_code_fits(result, template)
     assert_stage_holds(result)
 
 
@@ -315,6 +344,32 @@ async def test_a_quote_with_a_portrait_fits_every_field_at_its_limit(
         assert_fits(result["headline"], None if run else HEADLINE_READABLE)
     assert_fits(result["quote"], None if run else COPY_READABLE)
     assert_stage_holds(result)
+
+
+@pytest.mark.parametrize("code", ["numbered", "plain"])
+@pytest.mark.parametrize("run", [None, *UNBROKEN_RUNS], ids=lambda run: run or "running")
+@pytest.mark.parametrize("fmt", CODE_FORMATS, ids=case_id)
+async def test_the_most_code_fits_under_the_headline_at_its_limit(page, registry, fmt, run, code):
+    limit = limit_of("headline", CODE)
+    headline = run * limit if run else filled(limit)
+    filename = "W" * limit_of("filename")
+    result = await measure(
+        page, registry, CODE, fmt, code=code, headline=headline, filename=filename
+    )
+    assert_fits(result["headline"], None if run else HEADLINE_READABLE)
+    assert_fits(result["code"])
+    assert_stage_holds(result)
+    assert await page.evaluate(FILENAME_PROBE) is False
+
+
+@pytest.mark.parametrize("fmt", CODE_FORMATS, ids=case_id)
+async def test_a_short_snippet_is_set_at_the_code_maximum(page, registry, fmt):
+    # Catches a fit pass pinned to its floor, which every full block of code would hide.
+    result = await measure(page, registry, CODE, fmt, code="short", headline="Kurz")
+    maximum = await page.evaluate(
+        "parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--code-max'))"
+    )
+    assert result["code"]["size"] == maximum
 
 
 @pytest.mark.parametrize(("template", "fmt"), WITH_PAGINATION, ids=case_id)

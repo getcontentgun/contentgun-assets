@@ -10,10 +10,12 @@ CONTENT = f"{BUNDLE}/carousel-content"
 CLOSING = f"{BUNDLE}/carousel-closing"
 CAROUSEL = (COVER, CONTENT, CLOSING)
 QUOTE = f"{BUNDLE}/quote"
+CODE = f"{BUNDLE}/code"
 # The faces the bundle's CSS draws: the headlines in the display face, every other text in the
-# text face.
+# text face, and code in the mono face.
 DISPLAY_FACE = ("Space Grotesk", 700)
 TEXT_FACE = ("Inter", 400)
+MONO_FACE = ("JetBrains Mono", 400)
 API_KEYS = ("test-key", "second-key")
 
 # Assigned, not setdefault: an exported variable in the developer's shell or a line in .env

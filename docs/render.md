@@ -25,6 +25,7 @@ says where, see [Output as a URL](#output-as-a-url).
 | `quote` | string | per template | The quote itself, without quotation marks: the card draws its own. Up to 200 characters. Required by `demo/quote`, see [Quote card](#quote-card) |
 | `author` | string | no | Who said the quote. Up to 60 characters. Omitted or empty removes the element. Declared by `demo/quote` |
 | `role` | string | no | The author's role, company or the source of the quote, such as a talk. Up to 80 characters. Omitted or empty removes the element. Declared by `demo/quote` |
+| `filename` | string | no | The file name in the bar of the code's window, in the code's font. Up to 60 characters, never wrapped. Omitted or empty leaves the bar without one. Declared by `demo/code` |
 | `pagination` | string | no | Free text at the right end of the header row, shown exactly as sent, for example `"3/7"`, `"3 von 7"` or `"3"`. Up to 16 characters, never wrapped. A JSON number is a `400`. Omitted or empty removes the element. Declared by `demo/carousel-content`, `demo/carousel-closing` and `demo/quote`, see [Pagination](#pagination) |
 | `image` | string | no | Base64 image for `demo/card-image`, `demo/carousel-content` and `demo/quote`, with or without a `data:image/...;base64,` prefix. PNG, JPEG or WebP, up to `MAX_IMAGE_BYTES` (8 MB by default) after decoding. `demo/card-image` uses it as its background and falls back to a fallback image of its own without one; `demo/carousel-content` shows it under the text, see [Image or icon on a content slide](#image-or-icon-on-a-content-slide); `demo/quote` crops it to a round portrait next to the author |
 | `icon` | string | no | Base64 SVG pictogram for `demo/carousel-content`, with or without a `data:image/svg+xml;base64,` prefix, up to 256 KB after decoding. Drawn under the text as a silhouette in one color. Never together with `image`. See [Image or icon on a content slide](#image-or-icon-on-a-content-slide) for what an SVG has to meet |
@@ -33,7 +34,7 @@ says where, see [Output as a URL](#output-as-a-url).
 | `icon_upload` | string | no | The id of an uploaded SVG icon, in place of `icon`. Needs storage |
 | `image_url` | string | no | An `https` URL of the image, in place of `image`, up to 2048 characters. The service fetches it itself, see [Images and icons from a URL](#images-and-icons-from-a-url) |
 | `icon_url` | string | no | An `https` URL of the SVG icon, in place of `icon`, fetched the same way |
-| `code` | string | per template | Source code for a template that sets `code = true`, which requires it; `GET /v1/templates` reports such a template with `accepts_code`. At most 14 lines of 48 columns after normalization, never hyphenated or wrapped, see [Code](#code) |
+| `code` | string | per template | Source code for a template that sets `code = true`, today `demo/code`, which requires it; `GET /v1/templates` reports such a template with `accepts_code`. At most 14 lines of 48 columns after normalization, never hyphenated or wrapped, see [Code](#code) |
 | `language` | string | no | The language to highlight the code in, a short name of Pygments such as `python`, `javascript`, `typescript`, `bash`, `json`, `yaml`, `sql`, `html` or `diff`, in any case. Up to 40 characters. Omitted means plain text without highlighting. An unknown name is a `400` |
 | `line_numbers` | boolean | no | `true` puts the line numbers in front of the lines. Defaults to `false`. A string or a number is a `400` |
 | `highlight_lines` | array of integers | no | The lines to highlight, counted from 1 as the card numbers them, for example `[3, 4]`. A number outside the code, a string or a boolean is a `400` |
@@ -139,8 +140,8 @@ hyphenated or wrapped:
 
 The lines are numbered after normalization, as the card shows them, so `highlight_lines` and the
 messages count from the first line that is left. A template fits the code's font size to its box,
-between a floor and a maximum of its own, so a short snippet is set large and 14 full lines land
-at the floor without being clipped.
+between a floor and a maximum of its own, see [Code card](#code-card) for `demo/code`, so a short
+snippet is set large and 14 full lines never drop below the floor or get clipped.
 
 ### Output as a URL
 
@@ -174,9 +175,9 @@ to empty is a `400`.
 
 Four mechanisms keep text inside the card, in this order.
 
-1. **Character limits, enforced before rendering.** Headline up to 140, subline up to 200, handle, topic and author up to 60, role up to 80, pagination up to 16. Over the limit is a `400` and no image. A field a template declares without a typed counterpart, such as `body`, `cta` or `quote`, is capped at 200. A template may set tighter limits of its own in the `[limits]` table of its `template.toml`, which `GET /v1/templates` reports as `limits`.
+1. **Character limits, enforced before rendering.** Headline up to 140, subline up to 200, handle, topic, author and filename up to 60, role up to 80, pagination up to 16, code up to 14 lines of 48 columns. Over the limit is a `400` and no image. A field a template declares without a typed counterpart, such as `body`, `cta` or `quote`, is capped at 200. A template may set tighter limits of its own in the `[limits]` table of its `template.toml`, which `GET /v1/templates` reports as `limits`.
 2. **Hyphenation.** Every text field except the handle and the pagination is given German break points as soft hyphens before rendering, so a long compound breaks at a syllable and shows a hyphen.
-3. **Automatic font sizing.** On `demo/card` and `demo/card-image` the headline shrinks between 104px and 40px and the subline between 40px and 24px, until the text fits its box. The carousel templates and `demo/quote` have ranges of their own, listed under [Carousel text limits](#carousel-text-limits) and [Quote text limits](#quote-text-limits). Nothing is truncated.
+3. **Automatic font sizing.** On `demo/card` and `demo/card-image` the headline shrinks between 104px and 40px and the subline between 40px and 24px, until the text fits its box. The carousel templates, `demo/quote` and `demo/code` have ranges of their own, listed under [Carousel text limits](#carousel-text-limits), [Quote text limits](#quote-text-limits) and [Code text limits](#code-text-limits). Nothing is truncated.
 4. **Clipping**, if the text still does not fit at the minimum size. The boxes are `overflow: hidden`.
 
 **Step 4 is not reachable through the API**, because the character limit always bites first. The
@@ -517,6 +518,49 @@ case, and the stage never overflowed:
 Without a headline the quote box grows from 31% of the stage to 62% at `4:5`, and from 27% to 54%
 at `1:1`. `tests/test_text_limits.py` measures both cards in both formats, with and without the
 portrait.
+
+## Code card
+
+`demo/code` sets a snippet of source code in a dark window under a headline, in `4:5` and `1:1`, so
+it also works as a slide of a carousel:
+
+| Field | Required | On the card |
+|-------|----------|-------------|
+| `headline` | yes | Above the window, as on `demo/card`. Up to 60 characters, the template's own limit |
+| `code` | yes | In the window, in JetBrains Mono, highlighted in the bundle's colors, see [Code](#code) |
+| `language`, `line_numbers`, `highlight_lines` | no | How the code is highlighted and numbered. A highlighted line gets an amber band across the window and an amber line number |
+| `filename` | no | In the window's bar, next to three dots |
+| `handle`, `pagination` | no | The header row, as on the content slides |
+
+```json
+{ "template": "demo/code", "headline": "Eine Karte, ein Aufruf", "filename": "render.py", "language": "python", "line_numbers": true, "highlight_lines": [3], "code": "import httpx\n\ncard = httpx.post(URL, json=BODY)\ncard.raise_for_status()" }
+```
+
+### Code text limits
+
+The headline is fitted from 72px down to 40px, the code from 36px down to 24px. Code is never
+wrapped, so its width decides as often as its height: 48 columns with line numbers take 51.5
+columns of JetBrains Mono, whose characters are all 0.6em wide, and those fit the window from 26px
+down.
+
+Measured in the real renderer, in px, with the most code a card holds, 14 lines of 48 × `W`, a file
+name of 60 × `W`, and a headline at its limit of 60 characters, once as running text and once as a
+run of `W`. Every cell holds headline / code. Nothing was clipped in any case, the file name
+included, and the stage never overflowed:
+
+| Code | Format | Running text in the headline | `W` in the headline |
+|------|--------|------------------------------|---------------------|
+| with line numbers | `4:5` | 61 / 26 | 42 / 26 |
+| with line numbers | `1:1` | 56 / 25 | 41 / 25 |
+| without line numbers | `4:5` | 61 / 28 | 42 / 28 |
+| without line numbers | `1:1` | 56 / 25 | 41 / 25 |
+
+At `4:5` the width limits the code, at `1:1` the height: 14 lines at a line height of 1.375 plus
+the window's bar and padding leave 25px. The headline box takes at most 20% of the stage at `4:5`
+and 19% at `1:1` and never shrinks, so the window is the one item that gives way. A short snippet
+such as `print('Hallo')` is set at the full 36px. `tests/test_text_limits.py` measures both formats
+with and without line numbers, and fails once the code drops below its floor or the file name is
+cut.
 
 ## Notes
 

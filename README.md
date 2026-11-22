@@ -9,8 +9,8 @@ Templates come in bundles: a bundle is a folder with the templates of one design
 they need, fonts and images included, see [docs/bundles/README.md](docs/bundles/README.md). A
 template is addressed as `<bundle>/<template>`. The repository ships the built-in bundle
 `bundles/demo/`, a neutral design in slate and amber: `card` and `card-image` for single cards,
-`quote` for quotes and testimonials, and `carousel-cover`, `carousel-content` and
-`carousel-closing` for the slides of a carousel.
+`quote` for quotes and testimonials, `code` for source code highlighted on the server, and
+`carousel-cover`, `carousel-content` and `carousel-closing` for the slides of a carousel.
 `GET /v1/templates` lists them with their formats and fields.
 
 Every request belongs to a tenant, the owner of its key. A tenant sees the built-in bundles and

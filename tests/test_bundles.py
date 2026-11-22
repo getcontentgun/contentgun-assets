@@ -322,4 +322,5 @@ def test_the_suite_bundle_carries_everything_it_needs(tmp_path):
     assert registry.ids == [spec.id for spec in TemplateRegistry.load(BUILTIN_DIR).specs]
     for spec in registry.specs:
         fields = dict.fromkeys(spec.fields, "") | spec.defaults | spec.samples
-        assert registry.render_html(spec, spec.formats[0], fields)
+        code = spec.code_sample.check() if spec.code_sample else None
+        assert registry.render_html(spec, spec.formats[0], fields, code=code)

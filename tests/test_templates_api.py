@@ -5,6 +5,7 @@ from tests.conftest import (
     CARD_IMAGE,
     CAROUSEL,
     CLOSING,
+    CODE,
     CONTENT,
     COVER,
     QUOTE,
@@ -25,6 +26,7 @@ async def test_templates_lists_every_template(client):
         CLOSING,
         CONTENT,
         COVER,
+        CODE,
         QUOTE,
     ]
 
@@ -70,6 +72,7 @@ async def test_image_capability_is_reported(client):
         CLOSING: False,
         CONTENT: True,
         COVER: False,
+        CODE: False,
         QUOTE: True,
     }
 
@@ -83,13 +86,14 @@ async def test_icon_capability_is_reported(client):
         CLOSING: False,
         CONTENT: True,
         COVER: False,
+        CODE: False,
         QUOTE: False,
     }
 
 
 async def test_code_capability_is_reported(client, showcase_client):
     body = (await client.get("/v1/templates", headers=AUTH)).json()
-    assert not any(t["accepts_code"] for t in body["templates"])
+    assert [t["id"] for t in body["templates"] if t["accepts_code"]] == [CODE]
     body = (await showcase_client.get("/v1/templates", headers=AUTH)).json()
     snippet = next(t for t in body["templates"] if t["id"] == SNIPPET)
     assert snippet["accepts_code"] is True
@@ -120,10 +124,10 @@ async def test_a_template_lists_its_own_limits_and_formats(showcase_client):
     assert [bundle["name"] for bundle in body["bundles"]] == sorted([BUNDLE, "mini"])
 
 
-async def test_only_the_quote_tightens_a_service_limit(client):
+async def test_only_the_quote_and_the_code_card_tighten_a_service_limit(client):
     body = (await client.get("/v1/templates", headers=AUTH)).json()
     limits = {t["id"]: t["limits"] for t in body["templates"] if t["limits"]}
-    assert limits == {QUOTE: {"headline": 80}}
+    assert limits == {CODE: {"headline": 60}, QUOTE: {"headline": 80}}
 
 
 async def test_samples_are_not_part_of_the_listing(client):

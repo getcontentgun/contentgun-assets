@@ -15,6 +15,7 @@ from tests.conftest import (
     CARD,
     CARD_IMAGE,
     CLOSING,
+    CODE,
     CONTENT,
     COVER,
     DISPLAY_FACE,
@@ -40,6 +41,8 @@ STAGE_TOP = {"4:5": 80 + 66 + 48, "1:1": 80 + 66 + 40}
 BAR = (96, 12)
 ARROW_SIZES = {"4:5": 104, "1:1": 88}
 ICON_SIZES = {"4:5": 240, "1:1": 180}
+CODE_WINDOW = (22, 32, 42)
+CODE_STRING = (163, 211, 156)
 
 LONG_HEADLINE = (
     "Automatisierung ist kein Selbstzweck sondern ein Werkzeug fuer bessere Entscheidungen "
@@ -354,6 +357,33 @@ async def test_content_image_is_drawn_as_sent(live_client):
     assert response.status_code == 200, response.text
     red = sum(n for n, colour in colour_counts(image_of(response)) if colour == (255, 0, 0))
     assert red == pytest.approx(400 * 200, abs=2 * 400)
+
+
+def near(image: Image.Image, colour: tuple[int, int, int], tolerance: int = 6) -> int:
+    return sum(
+        count
+        for count, drawn in colour_counts(image)
+        if all(abs(a - b) <= tolerance for a, b in zip(drawn, colour, strict=True))
+    )
+
+
+@pytest.mark.parametrize("fmt", CAROUSEL_SIZES)
+async def test_code_card_draws_highlighted_code_in_its_window(live_client, fmt):
+    response = await render(
+        live_client,
+        template=CODE,
+        format=fmt,
+        headline="Ein Aufruf",
+        filename="render.py",
+        code='print("Hallo")',
+        language="python",
+        line_numbers=True,
+    )
+    assert response.status_code == 200, response.text
+    image = image_of(response)
+    assert image.size == CAROUSEL_SIZES[fmt]
+    assert near(image, CODE_WINDOW) > 50_000
+    assert near(image, CODE_STRING) > 100
 
 
 async def test_cover_swipe_button_stays_without_a_handle(live_client):

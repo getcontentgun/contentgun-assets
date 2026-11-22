@@ -22,9 +22,11 @@ from tests.conftest import (
     CARD_IMAGE,
     CAROUSEL,
     CLOSING,
+    CODE,
     CONTENT,
     COVER,
     DISPLAY_FACE,
+    MONO_FACE,
     QUOTE,
     SHOWCASE,
     SNIPPET,
@@ -50,7 +52,8 @@ def registry():
 
 def sample_html(registry, template_id: str, fmt: Format = Format.PORTRAIT_4_5, **fields) -> str:
     spec = registry.get(template_id)
-    return registry.render_html(spec, fmt, spec.defaults | spec.samples | fields)
+    code = spec.code_sample.check() if spec.code_sample else None
+    return registry.render_html(spec, fmt, spec.defaults | spec.samples | fields, code=code)
 
 
 def load_spec(tmp_path, toml: str):
@@ -58,7 +61,7 @@ def load_spec(tmp_path, toml: str):
 
 
 def test_registry_finds_every_template(registry):
-    assert registry.ids == [CARD, CARD_IMAGE, CLOSING, CONTENT, COVER, QUOTE]
+    assert registry.ids == [CARD, CARD_IMAGE, CLOSING, CONTENT, COVER, CODE, QUOTE]
 
 
 def test_shared_partials_are_not_a_template(registry):
@@ -96,7 +99,7 @@ def test_image_and_icon_capabilities(registry):
     icons = {spec.id for spec in registry.specs if spec.accepts_icon}
     assert images == {CARD_IMAGE, CONTENT, QUOTE}
     assert icons == {CONTENT}
-    assert not any(spec.accepts_code for spec in registry.specs)
+    assert {spec.id for spec in registry.specs if spec.accepts_code} == {CODE}
 
 
 def code_toml(sample: str) -> str:
@@ -413,6 +416,20 @@ def test_carousel_copy_uses_the_body_font(registry, name, field):
     assert f'class="copy {field}"' in html
     assert_face(css_rules(html, ".copy"), *TEXT_FACE)
     assert_inherits_face(css_rules(html, f".{field}"))
+
+
+def test_code_and_its_file_name_use_the_checked_mono_face(registry):
+    html = sample_html(registry, CODE)
+    assert_face(css_rules(html, ".code"), *MONO_FACE)
+    assert_face(css_rules(html, ".filename"), *MONO_FACE)
+    assert f'{MONO_FACE[1]} 20px "{MONO_FACE[0]}"' in registry.font_checks(registry.get(CODE))
+
+
+def test_code_is_never_hyphenated(registry):
+    html = sample_html(registry, CODE)
+    code = html.split('<pre class="code" id="code" data-fit="code">')[1].split("</pre>")[0]
+    assert "raise_for_status" in code
+    assert SOFT_HYPHEN not in code
 
 
 def test_cover_shows_the_subline_under_the_headline(registry):

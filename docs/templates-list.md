@@ -22,7 +22,7 @@ discover what `POST /v1/render` accepts.
   "bundles": [
     {
       "name": "demo",
-      "description": "A neutral demo bundle: slate cards with an amber accent, Space Grotesk headlines and Inter for every other text."
+      "description": "A neutral demo bundle: slate cards with an amber accent, Space Grotesk headlines, Inter text and JetBrains Mono code."
     }
   ],
   "templates": [
@@ -106,6 +106,23 @@ discover what `POST /v1/render` accepts.
       "accepts_code": false
     },
     {
+      "id": "demo/code",
+      "bundle": "demo",
+      "name": "code",
+      "description": "Code card: an amber bar, the headline, and under it the code in a dark window with an optional file name in the window's bar, highlighted in the bundle's colors. The code comes as code with its language, a short name such as python, javascript or bash, and optionally line_numbers and highlight_lines. At most 14 lines of 48 columns, so cut the snippet down to the lines that make the point.",
+      "formats": [
+        { "format": "4:5", "width": 1080, "height": 1350 },
+        { "format": "1:1", "width": 1080, "height": 1080 }
+      ],
+      "fields": ["headline", "filename", "handle", "pagination"],
+      "required": ["headline"],
+      "defaults": { "filename": "", "handle": "", "pagination": "" },
+      "limits": { "headline": 60 },
+      "accepts_image": false,
+      "accepts_icon": false,
+      "accepts_code": true
+    },
+    {
       "id": "demo/quote",
       "bundle": "demo",
       "name": "quote",
@@ -142,4 +159,4 @@ curl -s -H "Authorization: Bearer $API_KEY" http://127.0.0.1:8010/v1/templates
 - The `[samples]` table in a `template.toml` is not part of this response. It is preview content for [`GET /v1/debug/html`](debug-html.md), not a fallback the render endpoint ever uses.
 - `fields` is the allow-list for the render request. Any other field is a `400`.
 - `accepts_image` says whether the template takes the `image` parameter of the render request, `accepts_icon` whether it takes `icon`, and `accepts_code` whether it takes `code`, which such a template requires. All three are capabilities, not fields, so they do not appear in `fields`. A template that takes an image may also declare a fallback image from its bundle's `assets/`, which the render uses when the request sends none; one that takes an icon may not, or a card with an icon would carry the fallback image as well.
-- `limits` holds the character limits a template sets on top of the service-wide ones, from the `[limits]` table of its `template.toml`; in the `demo` bundle only `demo/quote` sets one, 80 characters for its headline. A field not listed keeps the service-wide limit: headline 140, subline 200, handle, topic and author 60, role 80, pagination 16, every other field 200.
+- `limits` holds the character limits a template sets on top of the service-wide ones, from the `[limits]` table of its `template.toml`; in the `demo` bundle `demo/quote` and `demo/code` set one each, 80 and 60 characters for their headline. A field not listed keeps the service-wide limit: headline 140, subline 200, handle, topic, author and filename 60, role 80, pagination 16, every other field 200.

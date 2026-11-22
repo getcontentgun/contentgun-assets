@@ -1,0 +1,36 @@
+name = "code"
+description = "Code card: an amber bar, the headline, and under it the code in a dark window with an optional file name in the window's bar, highlighted in the bundle's colors. The code comes as code with its language, a short name such as python, javascript or bash, and optionally line_numbers and highlight_lines. At most 14 lines of 48 columns, so cut the snippet down to the lines that make the point."
+formats = ["4:5", "1:1"]
+fields = ["headline", "filename", "handle", "pagination"]
+required = ["headline"]
+code = true
+
+[limits]
+headline = 60
+
+[defaults]
+filename = ""
+handle = ""
+pagination = ""
+
+[samples]
+headline = "Eine Karte, ein Aufruf"
+filename = "render.py"
+handle = "@contentgun"
+
+[code_sample]
+language = "python"
+line_numbers = true
+highlight_lines = [6]
+code = '''
+import httpx
+
+def render(headline: str) -> bytes:
+    response = httpx.post(
+        f"{BASE_URL}/v1/render",
+        json={"headline": headline},
+        headers={"Authorization": AUTH},
+    )
+    response.raise_for_status()
+    return response.content
+'''

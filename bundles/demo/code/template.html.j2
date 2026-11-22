@@ -1,0 +1,22 @@
+{% extends "_base/base.html.j2" %}
+
+{% block stage %}
+        <div class="bar"></div>
+        <div class="fit-box headline-box" id="headline-box">
+          <h1 class="headline" id="headline" data-fit="headline">{{ fields.headline | hyphenate }}</h1>
+        </div>
+        <div class="window" id="window">
+          <div class="window-bar">
+            <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+            {% if fields.filename %}<span class="filename" id="filename">{{ fields.filename }}</span>{% endif %}
+          </div>
+          {# Never through | hyphenate: the caps of lines and columns keep the code inside its box. #}
+          <div class="fit-box code-box" id="code-box">
+            <pre class="code" id="code" data-fit="code">{{ code.html }}</pre>
+          </div>
+        </div>
+{% endblock %}
+
+{% block meta_end %}
+        {% if fields.pagination %}<span class="pagination">{{ fields.pagination }}</span>{% endif %}
+{% endblock %}

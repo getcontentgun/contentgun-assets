@@ -1,12 +1,13 @@
 name = "demo"
-description = "A neutral demo bundle: slate cards with an amber accent, Space Grotesk headlines and Inter for every other text."
+description = "A neutral demo bundle: slate cards with an amber accent, Space Grotesk headlines, Inter text and JetBrains Mono code."
 
 [fonts]
 # Every template draws Space Grotesk 700 for the headline, quote also for the author, and Inter 400
-# for every other text.
-checks = ['700 40px "Space Grotesk"', '400 20px "Inter"']
+# for every other text; code draws JetBrains Mono 400 for the code and the file name.
+checks = ['700 40px "Space Grotesk"', '400 20px "Inter"', '400 20px "JetBrains Mono"']
 
-# Both files are variable fonts, so each face declares the full range of its weight axis.
+# Space Grotesk and Inter are variable fonts, so each of their faces declares the full range of
+# its weight axis. JetBrains Mono is a static file of the one weight it is drawn in.
 [[fonts.faces]]
 family = "Space Grotesk"
 file = "SpaceGrotesk-latin.woff2"
@@ -29,4 +30,16 @@ subset = "latin"
 family = "Inter"
 file = "Inter-latin-ext.woff2"
 weight = "100 900"
+subset = "latin-ext"
+
+[[fonts.faces]]
+family = "JetBrains Mono"
+file = "JetBrainsMono-latin.woff2"
+weight = "400"
+subset = "latin"
+
+[[fonts.faces]]
+family = "JetBrains Mono"
+file = "JetBrainsMono-latin-ext.woff2"
+weight = "400"
 subset = "latin-ext"

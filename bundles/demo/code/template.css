@@ -1,0 +1,165 @@
+:root {
+  --headline-box-height: 20%;
+  --headline-max: 72px;
+  --headline-min: 40px;
+
+  --code-max: 36px;
+  --code-min: 24px;
+  --code-padding-x: 32px;
+  --code-padding-y: 24px;
+
+  --window-bar-height: 52px;
+  --window-radius: 16px;
+  --dot-size: 14px;
+  --filename-size: 20px;
+}
+
+:root[data-format="1:1"] {
+  --headline-box-height: 19%;
+  --code-padding-y: 20px;
+  --window-bar-height: 48px;
+}
+
+/* Only the window gives way when the stage runs short; a shrinking headline box would make the
+   fit pass pick a smaller headline than the text needs. */
+.headline-box {
+  flex-shrink: 0;
+}
+
+.window {
+  flex: 0 1 auto;
+  min-height: 0;
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: var(--window-radius);
+  background: var(--color-code-background);
+}
+
+.window-bar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: var(--window-bar-height);
+  padding: 0 24px;
+  background: var(--color-code-bar);
+}
+
+.dot {
+  flex: 0 0 auto;
+  width: var(--dot-size);
+  height: var(--dot-size);
+  border-radius: 50%;
+  background: var(--color-line);
+}
+
+.filename {
+  min-width: 0;
+  margin-left: 14px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-family: "JetBrains Mono", monospace;
+  font-weight: 400;
+  font-size: var(--filename-size);
+  font-variant-ligatures: none;
+  color: var(--color-muted);
+}
+
+/* A margin, not padding: the fit pass compares the code's scrollWidth with the box's
+   clientWidth, which padding would widen. The clip margin lets the band of a highlighted line
+   paint into that margin, up to the window's edges. */
+.code-box {
+  flex: 1 1 auto;
+  width: auto;
+  min-height: 0;
+  margin: 0 var(--code-padding-x);
+  align-items: flex-start;
+  overflow: clip;
+  overflow-clip-margin: var(--code-padding-x);
+}
+
+.code {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  padding: var(--code-padding-y) 0;
+  font-family: "JetBrains Mono", monospace;
+  font-weight: 400;
+  font-size: var(--code-max);
+  line-height: 1.375;
+  font-variant-ligatures: none;
+  color: var(--color-code-text);
+  white-space: pre;
+}
+
+.line {
+  display: block;
+}
+
+.hl {
+  background: var(--color-code-highlight);
+  /* Outer shadows are drawn outside the border box only, so these carry the band to the
+     window's edges without changing what the fit pass measures. */
+  box-shadow:
+    calc(-1 * var(--code-padding-x)) 0 0 var(--color-code-highlight),
+    var(--code-padding-x) 0 0 var(--color-code-highlight);
+}
+
+.ln {
+  display: inline-block;
+  width: 2ch;
+  margin-right: 1.5ch;
+  text-align: right;
+  color: var(--color-code-line-number);
+}
+
+.hl .ln {
+  color: var(--color-accent);
+}
+
+.tok-keyword,
+.tok-tag {
+  color: var(--color-code-keyword);
+}
+
+.tok-string,
+.tok-inserted {
+  color: var(--color-code-string);
+}
+
+.tok-number {
+  color: var(--color-code-number);
+}
+
+.tok-comment {
+  color: var(--color-code-comment);
+}
+
+.tok-function,
+.tok-attribute {
+  color: var(--color-code-function);
+}
+
+.tok-type {
+  color: var(--color-code-type);
+}
+
+.tok-builtin {
+  color: var(--color-code-builtin);
+}
+
+.tok-decorator {
+  color: var(--color-code-decorator);
+}
+
+.tok-operator,
+.tok-punctuation {
+  color: var(--color-code-operator);
+}
+
+.tok-deleted {
+  color: var(--color-code-deleted);
+}
