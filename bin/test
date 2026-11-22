@@ -77,8 +77,8 @@ import importlib.metadata
 import importlib.util
 
 names = (
-    "pytest", "httpx", "asgi_lifespan", "PIL", "ruff", "pyphen", "playwright", "pypdf", "boto3",
-    "uvicorn",
+    "pytest", "httpx", "asgi_lifespan", "PIL", "ruff", "pyphen", "pygments", "playwright",
+    "pypdf", "boto3", "uvicorn",
 )
 missing = [name for name in names if importlib.util.find_spec(name) is None]
 # The folder mcp/ is found as a namespace package when the SDK is missing, so ask for the

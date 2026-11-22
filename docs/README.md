@@ -31,7 +31,7 @@ mail, documented in [mcp/remote.md](mcp/remote.md).
 All error responses use the same envelope:
 
 ```json
-{ "ok": false, "error": "Unknown template 'nope'. Available: demo/card, demo/card-image, demo/carousel-closing, demo/carousel-content, demo/carousel-cover." }
+{ "ok": false, "error": "Unknown template 'nope'. Available: demo/card, demo/card-image, demo/carousel-closing, demo/carousel-content, demo/carousel-cover, demo/quote." }
 ```
 
 On success the render endpoint answers with the raw PNG, the document endpoint with the raw PDF,

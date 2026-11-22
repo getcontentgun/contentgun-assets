@@ -4,6 +4,7 @@ from app.errors import ApiError
 from app.formats import Format
 from app.rendering import (
     check_render,
+    resolve_code,
     resolve_fields,
     resolve_format,
     resolve_icon,
@@ -22,6 +23,7 @@ from tests.conftest import (
     COVER,
     QUOTE,
     SHOWCASE,
+    SNIPPET,
     image_base64,
     svg_base64,
     write_bundle,
@@ -292,6 +294,101 @@ async def test_author_and_role_over_their_limits_return_400(client, field, limit
     )
     assert response.status_code == 400
     assert response.json()["error"].startswith(f"{field}:")
+
+
+@pytest.mark.parametrize(
+    "sent",
+    [
+        {"code": "print(1)"},
+        {"code": None, "language": "python"},
+        {"code": None, "line_numbers": True},
+        {"code": None, "highlight_lines": [1]},
+    ],
+)
+def test_code_for_a_template_without_code_raises_400(registry, sent):
+    with pytest.raises(ApiError) as excinfo:
+        resolve_code(registry.get(CARD), **sent)
+    assert excinfo.value.message == f"Template {CARD!r} does not accept code."
+
+
+def test_blank_code_and_unset_options_count_as_not_sent(registry):
+    spec = registry.get(CARD)
+    assert resolve_code(spec, " ", "", line_numbers=False, highlight_lines=[]) is None
+
+
+@pytest.fixture(scope="module")
+def snippet(showcase_root):
+    return TemplateRegistry.load(showcase_root).get(SNIPPET)
+
+
+def test_a_template_with_code_requires_it(snippet):
+    with pytest.raises(ApiError) as excinfo:
+        resolve_code(snippet, " ", "python")
+    assert excinfo.value.message == f"Field 'code' is required by template {SNIPPET!r}."
+
+
+def test_code_that_cannot_be_shown_raises_400(snippet):
+    with pytest.raises(ApiError) as excinfo:
+        resolve_code(snippet, "x", "klingon")
+    assert excinfo.value.status_code == 400
+    assert excinfo.value.message.startswith("Unknown language 'klingon'.")
+
+
+def test_check_render_carries_the_checked_code(showcase_root):
+    payload = RenderRequest(
+        template=SNIPPET, headline="Hallo", code="a\nb", line_numbers=True, highlight_lines=[2]
+    )
+    card = check_render(TemplateRegistry.load(showcase_root), payload)
+    assert card.code.lines == 2
+    assert '<span class="line hl"><span class="ln">2</span>b</span>' in card.code.html
+    assert "code" not in card.fields
+
+
+async def test_code_reaches_the_renderer(showcase_client):
+    response = await showcase_client.post(
+        "/v1/render",
+        headers=AUTH,
+        json={
+            "template": SNIPPET,
+            "headline": "Hallo",
+            "code": "def greet(name):\n    return name",
+            "language": "python",
+            "line_numbers": True,
+            "highlight_lines": [2],
+        },
+    )
+    assert response.status_code == 503
+    assert response.json()["error"] == "Renderer is not available."
+
+
+async def test_code_sent_to_a_card_returns_400(client):
+    response = await client.post(
+        "/v1/render", headers=AUTH, json={"headline": "Hallo", "code": "print(1)"}
+    )
+    assert response.status_code == 400
+    assert response.json()["error"] == f"Template {CARD!r} does not accept code."
+
+
+@pytest.mark.parametrize(
+    ("key", "value"),
+    [
+        ("line_numbers", "true"),
+        ("line_numbers", 1),
+        ("highlight_lines", ["2"]),
+        ("highlight_lines", [True]),
+        ("highlight_lines", 2),
+        ("code", "x" * 2001),
+        ("language", "x" * 41),
+    ],
+)
+async def test_code_and_its_options_keep_their_json_types_and_caps(showcase_client, key, value):
+    response = await showcase_client.post(
+        "/v1/render",
+        headers=AUTH,
+        json={"template": SNIPPET, "headline": "Hallo", "code": "a\nb"} | {key: value},
+    )
+    assert response.status_code == 400
+    assert response.json()["error"].startswith(key)
 
 
 def test_a_template_without_a_headline_takes_a_request_without_one(tmp_path):

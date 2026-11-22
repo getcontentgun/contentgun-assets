@@ -43,6 +43,10 @@ RESERVED: dict[str, str | None] = {
     "icon": "icon_svg, icon_url or icon_upload",
     "icon_url": "icon_url",
     "icon_upload": "icon_upload",
+    "code": None,
+    "language": None,
+    "line_numbers": None,
+    "highlight_lines": None,
     "output": None,
 }
 GRAPHICS = ("image_url", "image_upload", "icon_svg", "icon_url", "icon_upload")

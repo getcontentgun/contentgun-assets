@@ -20,10 +20,11 @@ variant, so most of the time there is no URL to type.
 | `template`, `format` | as in render, the tenant's default template included | `template` takes a template id, `<bundle>/<template>`, of a template the tenant can use |
 | `image_url` | the template's fallback image | Image for a template that accepts one, as a URL that the browser loads. Ignored by templates without the capability |
 | `icon_url` | none | SVG icon for a template that accepts one, as a URL that the browser loads, for example from jsDelivr. Ignored by templates without the capability. Together with `image_url` it is a `400`, as on the render route |
+| `code`, `language`, `line_numbers`, `highlight_lines` | the `[code_sample]` table of the template's `template.toml` | Code for a template with `code = true`, checked as in render. `highlight_lines` takes line numbers separated by commas, such as `3,4`, and empty for none; `line_numbers` takes `true` or `false`. Other `code` drops the highlighted lines of the sample, which belong to the sample's lines. A template without code answers any of them with a `400` |
 | `fit` | `1` | `0` disables the fit-text script, so the CSS font sizes apply unchanged |
-| any field the template declares | the field's value in the `[samples]` table of the template's `template.toml`, else its default | The same limits as in the render request: `headline` up to 140 characters, `handle` and `topic` up to 60, `pagination` up to 16, every other field up to 200, and whatever tighter limits the template sets in `[limits]`. Empty removes an optional element |
+| any field the template declares | the field's value in the `[samples]` table of the template's `template.toml`, else its default | The same limits as in the render request: `headline` up to 140 characters, `handle`, `topic` and `author` up to 60, `role` up to 80, `pagination` up to 16, every other field up to 200, and whatever tighter limits the template sets in `[limits]`. Empty removes an optional element |
 
-Every query parameter other than the six above is taken as a field. One the template does not
+Every query parameter other than the ten above is taken as a field. One the template does not
 declare, such as a `subline` left over after switching to `demo/carousel-content`, is a `400`
 listing the accepted fields, exactly as on the render route.
 
@@ -32,7 +33,7 @@ listing the accepted fields, exactly as on the render route.
 | Status | Body | Description |
 |--------|------|-------------|
 | `200` | HTML | The exact markup the screenshot is taken from |
-| `400` | `{"ok": false, "error": "..."}` | Same length limits and field resolution as the render endpoint, including a field the template does not declare, and an `image_url` next to an `icon_url`. Also a missing `tenant` while there are several, an unknown one, and a template the tenant cannot use |
+| `400` | `{"ok": false, "error": "..."}` | Same length limits and field resolution as the render endpoint, including a field the template does not declare, and an `image_url` next to an `icon_url`. Also code the template does not take or cannot show, and a `highlight_lines` that is not a list of numbers. Also a missing `tenant` while there are several, an unknown one, and a template the tenant cannot use |
 | `404` | `{"ok": false, "error": "Not found."}` | `DEBUG_ROUTES` is off |
 
 ## Example

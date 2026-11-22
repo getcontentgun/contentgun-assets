@@ -47,12 +47,12 @@ async def render(request: Request, payload: RenderRequest, tenant: CurrentTenant
         raise ApiError(503, "Renderer is not available.")
 
     html = registry.render_html(
-        card.spec, card.format, card.fields, image=card.image, icon=card.icon
+        card.spec, card.format, card.fields, image=card.image, icon=card.icon, code=card.code
     )
 
     logger.info(
         "Rendering tenant=%s template=%s format=%s output=%s headline_length=%d image_bytes=%d "
-        "icon_bytes=%d",
+        "icon_bytes=%d code_lines=%d",
         tenant.name,
         card.spec.id,
         card.format.value,
@@ -60,6 +60,7 @@ async def render(request: Request, payload: RenderRequest, tenant: CurrentTenant
         len(card.fields.get("headline", "")),
         data_uri_size(card.image),
         data_uri_size(card.icon),
+        card.code.lines if card.code else 0,
     )
 
     png = await capture(pool.render_png, html, card.format, registry.font_checks(card.spec))

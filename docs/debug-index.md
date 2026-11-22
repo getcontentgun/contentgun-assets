@@ -32,6 +32,7 @@ with the right ones without a code change:
 | With an image | templates with `image = true` and no fallback image, today `demo/carousel-content` and `demo/quote` | `image_url` pointing at the sample image |
 | With an icon | templates with `icon = true`, today `demo/carousel-content` | `icon_url` pointing at the sample icon |
 | With an icon in the text color | templates with `icon = true` that declare `icon_color` | The same, plus `icon_color=text` |
+| Plain code | templates with `code = true` whose `[code_sample]` has line numbers or highlighted lines | `line_numbers=false` and an empty `highlight_lines` |
 
 A template with a fallback image shows it in its sample already, so it gets no image row.
 

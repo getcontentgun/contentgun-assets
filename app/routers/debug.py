@@ -9,10 +9,12 @@ from fastapi.responses import HTMLResponse, Response
 from jinja2 import Environment
 from pydantic import ValidationError
 
+from app.code import Code
 from app.errors import ApiError
 from app.formats import Format
 from app.rendering import (
     reject_image_and_icon,
+    resolve_code,
     resolve_fields,
     resolve_format,
     resolve_image,
@@ -24,7 +26,20 @@ from app.tenants import Tenant, TenantDirectory
 
 router = APIRouter(prefix="/v1/debug", tags=["debug"], include_in_schema=False)
 
-ROUTE_PARAMETERS = frozenset({"tenant", "template", "format", "image_url", "icon_url", "fit"})
+ROUTE_PARAMETERS = frozenset(
+    {
+        "tenant",
+        "template",
+        "format",
+        "image_url",
+        "icon_url",
+        "code",
+        "language",
+        "line_numbers",
+        "highlight_lines",
+        "fit",
+    }
+)
 NO_STORE = {"Cache-Control": "no-store"}
 
 SAMPLE_IMAGE_SIZE = (1200, 675)
@@ -110,6 +125,9 @@ def _variants(spec: TemplateSpec, samples: dict[str, str]) -> list[tuple[str, di
         variants.append(("With an icon", icon))
         if "icon_color" in spec.fields:
             variants.append(("With an icon in the text color", icon | {"icon_color": "text"}))
+    sample = spec.code_sample
+    if sample is not None and (sample.line_numbers or sample.highlight_lines):
+        variants.append(("Plain code", {"line_numbers": "false", "highlight_lines": ""}))
     return variants
 
 
@@ -220,6 +238,37 @@ async def sample_image() -> Response:
     return Response(sample_png(), media_type="image/png", headers=NO_STORE)
 
 
+def _highlight_lines(raw: str | None) -> list[int] | None:
+    if raw is None:
+        return None
+    try:
+        return [int(part) for part in raw.split(",") if part.strip()]
+    except ValueError:
+        raise ApiError(
+            400, "highlight_lines takes line numbers separated by commas, such as 3,4."
+        ) from None
+
+
+def _code(
+    spec: TemplateSpec,
+    code: str | None,
+    language: str | None,
+    line_numbers: bool | None,
+    highlight_lines: str | None,
+) -> Code | None:
+    """The template's code sample with the code parameters of the query on top. Other code drops
+    the highlighted lines of the sample, which belong to the sample's lines."""
+    lines = _highlight_lines(highlight_lines)
+    sample = spec.code_sample
+    if sample is not None:
+        if lines is None and code is None:
+            lines = list(sample.highlight_lines)
+        code = sample.code if code is None else code
+        language = sample.language if language is None else language
+        line_numbers = sample.line_numbers if line_numbers is None else line_numbers
+    return resolve_code(spec, code, language, line_numbers, lines)
+
+
 @router.get("/html", response_class=HTMLResponse)
 async def debug_html(
     request: Request,
@@ -228,6 +277,10 @@ async def debug_html(
     format: Format | None = None,
     image_url: str | None = None,
     icon_url: str | None = None,
+    code: str | None = None,
+    language: str | None = None,
+    line_numbers: bool | None = None,
+    highlight_lines: str | None = None,
     fit: int = 1,
 ) -> HTMLResponse:
     registry = _tenant(request.app.state.tenants, tenant).registry
@@ -258,6 +311,9 @@ async def debug_html(
     reject_image_and_icon(image_url, icon_url)
     image = image_url if image_url and spec.accepts_image else resolve_image(spec, None)
     icon = icon_url if icon_url and spec.accepts_icon else None
+    block = _code(spec, code, language, line_numbers, highlight_lines)
 
-    html = registry.render_html(spec, fmt, fields, fit_text=bool(fit), image=image, icon=icon)
+    html = registry.render_html(
+        spec, fmt, fields, fit_text=bool(fit), image=image, icon=icon, code=block
+    )
     return HTMLResponse(html, headers=NO_STORE)

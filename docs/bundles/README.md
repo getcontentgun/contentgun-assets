@@ -117,12 +117,47 @@ Put the license of every font next to it in `fonts/`.
 | `image` | no | `true` lets the template take the request's image |
 | `fallback_image` | no | A file in the bundle's `assets/`, used when a request sends no image. Needs `image = true` |
 | `icon` | no | `true` lets the template take an SVG icon. Not together with `fallback_image` |
+| `code` | no | `true` lets the template take source code, and makes every request carry some. Needs a `[code_sample]` |
+| `[code_sample]` | with `code` | The code of the debug route's preview: `code`, a string, and optionally `language`, `line_numbers` and `highlight_lines`, as in a render request. It must pass the same checks, or the start fails |
 
 `template.html.j2` receives `width`, `height`, `format`, `format_token`, `fields`, `image`, `icon`,
-`css` (the template's `template.css`), `font_css` (the `@font-face` rules of the bundle),
+`code`, `css` (the template's `template.css`), `font_css` (the `@font-face` rules of the bundle),
 `font_checks` (its checks) and `fit_text`, plus the filters `hyphenate`, `highlight`, `percent` and
 `registered` and the global `inline_svg()`. `CLAUDE.md` describes how a template uses them, under
 "Adding a template".
+
+### Code
+
+On a template with `code = true`, `code` holds the request's code, checked and highlighted; on
+every other template it is `None`. `code.html` is the markup to put into the fitted element,
+`code.lines` the number of lines, `code.line_numbers` whether the request asked for line numbers,
+and `code.language` the language as sent, in lowercase, or `text`.
+
+The markup is one `<span class="line">` per line, with nothing between them, so the bundle's CSS
+must set `.line { display: block; }`, under `white-space: pre`. A highlighted line carries the class
+`hl` as well. With line numbers, every line starts with `<span class="ln">` and its number. Inside a
+line, every token the bundle may color is a `<span class="tok-<class>">`, and everything else is
+plain text, escaped:
+
+| Class | Tokens |
+|-------|--------|
+| `tok-keyword` | keywords, word operators such as `and` and `not`, preprocessor directives |
+| `tok-string` | strings of every kind, docstrings and the file name of an `#include` |
+| `tok-number` | numbers |
+| `tok-comment` | comments |
+| `tok-function` | the name in a function definition |
+| `tok-type` | the name in a class definition and exception names |
+| `tok-builtin` | builtins, such as `print`, `len` or `echo`, and `self` |
+| `tok-decorator` | decorators and annotations |
+| `tok-tag` | tags of HTML and XML |
+| `tok-attribute` | attributes of HTML and XML |
+| `tok-operator` | operators |
+| `tok-punctuation` | brackets, commas, colons |
+| `tok-inserted`, `tok-deleted` | the added and removed lines of a diff |
+
+A class without a rule in the CSS simply draws in the text color. The code is never hyphenated: the
+caps of 14 lines and 48 columns stand in for `| hyphenate`, so a template's floor for the code
+must hold 14 lines of 48 columns, line numbers included, see [Code](../render.md#code).
 
 ## Isolation
 
@@ -148,6 +183,7 @@ message begins with the file at fault and names the bundle or the template:
 - a bundle has no template, or a template lacks `template.toml` or `template.html.j2`
 - a `template.toml` breaks one of its rules, see the table above
 - a fallback image is missing, outside the bundle's `assets/`, or not a PNG, JPEG or WebP file
+- a template sets `code = true` without a `[code_sample]`, has one without `code = true`, or has a code sample that a render request could not send
 
 The checks of the tenants come on top, a tenant without a default template it can use among them;
 they are listed in [Tenants](../tenants/README.md#startup-validation). `bin/development` loads the

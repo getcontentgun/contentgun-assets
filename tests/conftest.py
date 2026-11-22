@@ -205,7 +205,7 @@ async def client_of(app: FastAPI) -> AsyncIterator[AsyncClient]:
 
 
 # What the renderer offers beyond the bundle the suite tests: a template's own [limits], the
-# highlight and percent filters, and the 9:16 format.
+# highlight and percent filters, the 9:16 format, and in SNIPPET the smallest template with code.
 SHOWCASE = "mini/showcase"
 SHOWCASE_TEMPLATE = (
     'formats = ["9:16", "4:5"]\n'
@@ -220,15 +220,33 @@ SHOWCASE_HTML = (
     '--focus-x: {{ fields.focus_x | percent }}%;">'
     "{{ fields.headline | highlight(fields.highlight) }}</main>"
 )
+SNIPPET = "mini/snippet"
+SNIPPET_CODE = "def greet(name):\n    return name"
+SNIPPET_TEMPLATE = (
+    'formats = ["4:5"]\n'
+    'fields = ["headline"]\n'
+    'required = ["headline"]\n'
+    "code = true\n"
+    '[samples]\nheadline = "Gute Karten"\n'
+    '[code_sample]\nlanguage = "python"\nline_numbers = true\nhighlight_lines = [2]\n'
+    f"code = {json.dumps(SNIPPET_CODE)}\n"
+)
+SNIPPET_HTML = '<h1>{{ fields.headline }}</h1><pre class="code">{{ code.html }}</pre>'
 
 
 @pytest.fixture(scope="module")
 def showcase_root(tmp_path_factory) -> Path:
-    """The bundles of the suite next to a small one with SHOWCASE, so DEFAULT_TEMPLATE still
-    resolves."""
+    """The bundles of the suite next to a small one with SHOWCASE and SNIPPET, so
+    DEFAULT_TEMPLATE still resolves."""
     root = tmp_path_factory.mktemp("bundles")
     (root / BUNDLE).symlink_to(BUILTIN_DIR / BUNDLE)
-    write_bundle(root, templates={"showcase": (SHOWCASE_TEMPLATE, SHOWCASE_HTML)})
+    write_bundle(
+        root,
+        templates={
+            "showcase": (SHOWCASE_TEMPLATE, SHOWCASE_HTML),
+            "snippet": (SNIPPET_TEMPLATE, SNIPPET_HTML),
+        },
+    )
     return root
 
 

@@ -153,7 +153,7 @@ async def document(request: Request, payload: DocumentRequest, tenant: CurrentTe
     pages = []
     for slide in slides:
         html = registry.render_html(
-            slide.spec, fmt, slide.fields, image=slide.image, icon=slide.icon
+            slide.spec, fmt, slide.fields, image=slide.image, icon=slide.icon, code=slide.code
         )
         checks = registry.font_checks(slide.spec)
         pages.append(await capture(pool.render_pdf, html, fmt, checks))

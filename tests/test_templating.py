@@ -3,6 +3,7 @@ import re
 
 import pytest
 
+from app.code import MAX_CODE_COLUMNS, CodeSample
 from app.formats import Format
 from app.hyphenation import SOFT_HYPHEN
 from app.templating import (
@@ -26,6 +27,8 @@ from tests.conftest import (
     DISPLAY_FACE,
     QUOTE,
     SHOWCASE,
+    SNIPPET,
+    TEMPLATE_SAMPLES,
     TEXT_FACE,
     template_toml,
     write_template,
@@ -93,6 +96,68 @@ def test_image_and_icon_capabilities(registry):
     icons = {spec.id for spec in registry.specs if spec.accepts_icon}
     assert images == {CARD_IMAGE, CONTENT, QUOTE}
     assert icons == {CONTENT}
+    assert not any(spec.accepts_code for spec in registry.specs)
+
+
+def code_toml(sample: str) -> str:
+    return template_toml("code = true\n", f"{TEMPLATE_SAMPLES}[code_sample]\n{sample}\n")
+
+
+def test_a_template_with_code_keeps_its_code_sample(tmp_path):
+    spec = load_spec(
+        tmp_path, code_toml('code = "print(1)"\nlanguage = "python"\nhighlight_lines = [1]')
+    )
+    assert spec.accepts_code is True
+    assert spec.code_sample == CodeSample("print(1)", "python", False, (1,))
+
+
+def test_code_needs_a_code_sample(tmp_path):
+    with pytest.raises(RuntimeError) as excinfo:
+        load_spec(tmp_path, template_toml("code = true\n"))
+    assert "sets code = true without a [code_sample] table" in str(excinfo.value)
+
+
+def test_a_code_sample_needs_code(tmp_path):
+    toml = template_toml(samples=f'{TEMPLATE_SAMPLES}[code_sample]\ncode = "print(1)"\n')
+    with pytest.raises(RuntimeError) as excinfo:
+        load_spec(tmp_path, toml)
+    assert "has a [code_sample] table without setting code = true" in str(excinfo.value)
+
+
+@pytest.mark.parametrize(
+    ("sample", "problem"),
+    [
+        ('code = "  "', "has a [code_sample] without code"),
+        ('code = "x"\nlanguage = 3', "whose language is not a string"),
+        ('code = "x"\nline_numbers = "yes"', "whose line_numbers is neither true nor false"),
+        ('code = "x"\nhighlight_lines = ["1"]', "whose highlight_lines is not a list"),
+        ('code = "x"\ncolour = "red"', "the unknown key 'colour' in [code_sample]"),
+        ('code = "x"\nlanguage = "klingon"', "cannot be shown: Unknown language 'klingon'"),
+        (
+            f'code = "{"x" * (MAX_CODE_COLUMNS + 1)}"',
+            f"cannot be shown: Line 1 of the code is {MAX_CODE_COLUMNS + 1} columns wide",
+        ),
+        ('code = "x"\nhighlight_lines = [2]', "cannot be shown: highlight_lines names line 2"),
+    ],
+)
+def test_a_code_sample_that_cannot_be_shown_stops_the_start(tmp_path, sample, problem):
+    with pytest.raises(RuntimeError) as excinfo:
+        load_spec(tmp_path, code_toml(sample))
+    assert problem in str(excinfo.value)
+    assert "Template 'mini/plain'" in str(excinfo.value)
+
+
+def test_the_code_reaches_the_template(showcase_root):
+    registry = TemplateRegistry.load(showcase_root)
+    spec = registry.get(SNIPPET)
+    html = registry.render_html(
+        spec, Format.PORTRAIT_4_5, spec.samples, code=spec.code_sample.check()
+    )
+    assert (
+        '<pre class="code"><span class="line"><span class="ln">1</span>'
+        '<span class="tok-keyword">def</span>' in html
+    )
+    assert '<span class="line hl"><span class="ln">2</span>' in html
 
 
 def test_card_image_renders_the_backdrop_and_scrim(registry):

@@ -30,6 +30,7 @@ async def list_templates(tenant: CurrentTenant) -> TemplatesResponse:
                 limits=dict(spec.limits),
                 accepts_image=spec.accepts_image,
                 accepts_icon=spec.accepts_icon,
+                accepts_code=spec.accepts_code,
             )
         )
 

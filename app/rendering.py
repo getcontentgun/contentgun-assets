@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 from app.browser import FontNotLoaded, RenderBusy, RenderTimeout, RenderUnavailable
+from app.code import Code, CodeError, check_code
 from app.errors import ApiError
 from app.fetching import checked_url, url_subject
 from app.files import Kind, TenantUploads, storage_missing
@@ -24,6 +25,7 @@ class ResolvedRender:
     fields: dict[str, str]
     image: str | None
     icon: str | None
+    code: Code | None = None
 
 
 @dataclass(frozen=True)
@@ -45,6 +47,7 @@ class CheckedRender:
     image: str | None
     icon: str | None
     pending: Pending | None
+    code: Code | None = None
 
 
 def resolve_template(registry: TemplateRegistry, template_id: str | None) -> TemplateSpec:
@@ -162,6 +165,28 @@ def resolve_icon(spec: TemplateSpec, raw: str | None) -> str | None:
     return decode_icon(raw)
 
 
+def resolve_code(
+    spec: TemplateSpec,
+    code: str | None,
+    language: str | None = None,
+    line_numbers: bool | None = None,
+    highlight_lines: Sequence[int] | None = None,
+) -> Code | None:
+    """The code of a request, checked and highlighted for a template with code = true. A blank
+    code or language, false line numbers and no highlighted lines count as not sent."""
+    sent = _given(code) or _given(language) or bool(line_numbers) or bool(highlight_lines)
+    if not spec.accepts_code:
+        if sent:
+            raise ApiError(400, f"Template {spec.id!r} does not accept code.")
+        return None
+    if not _given(code):
+        raise ApiError(400, f"Field 'code' is required by template {spec.id!r}.")
+    try:
+        return check_code(code, language, bool(line_numbers), highlight_lines or ())
+    except CodeError as exc:
+        raise ApiError(400, str(exc)) from None
+
+
 def resolve_fields(spec: TemplateSpec, requested: dict[str, object]) -> dict[str, str]:
     unknown = sorted(set(requested) - set(spec.fields) - RESERVED_KEYS)
     if unknown:
@@ -205,6 +230,9 @@ def check_render(registry: TemplateRegistry, payload: RenderRequest) -> CheckedR
         if key not in RESERVED_KEYS
     }
     fields = resolve_fields(spec, requested)
+    code = resolve_code(
+        spec, payload.code, payload.language, payload.line_numbers, payload.highlight_lines
+    )
     reject_two_sources(payload, "image")
     reject_two_sources(payload, "icon")
     reject_image_and_icon(_source(payload, "image"), _source(payload, "icon"))
@@ -217,7 +245,7 @@ def check_render(registry: TemplateRegistry, payload: RenderRequest) -> CheckedR
     image = None if pending_kind == "image" else resolve_image(spec, payload.image)
     icon = None if pending_kind == "icon" else resolve_icon(spec, payload.icon)
     return CheckedRender(
-        spec=spec, format=fmt, fields=fields, image=image, icon=icon, pending=pending
+        spec=spec, format=fmt, fields=fields, image=image, icon=icon, pending=pending, code=code
     )
 
 
@@ -236,7 +264,12 @@ async def finish_render(
         else:
             icon = uri
     return ResolvedRender(
-        spec=card.spec, format=card.format, fields=card.fields, image=image, icon=icon
+        spec=card.spec,
+        format=card.format,
+        fields=card.fields,
+        image=image,
+        icon=icon,
+        code=card.code,
     )
 
 

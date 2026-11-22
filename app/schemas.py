@@ -1,7 +1,8 @@
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt
 
+from app.code import MAX_CODE_LENGTH, MAX_CODE_LINES, MAX_LANGUAGE_LENGTH
 from app.formats import Format
 
 MAX_FIELD_LENGTH = 200
@@ -38,6 +39,12 @@ class RenderRequest(BaseModel):
     icon_upload: str | None = Field(default=None, max_length=64)
     image_url: str | None = Field(default=None, max_length=MAX_URL_LENGTH)
     icon_url: str | None = Field(default=None, max_length=MAX_URL_LENGTH)
+    # Not template fields either: code outgrows the cap of a field, and app/code.py checks it in
+    # lines and columns.
+    code: str | None = Field(default=None, max_length=MAX_CODE_LENGTH)
+    language: str | None = Field(default=None, max_length=MAX_LANGUAGE_LENGTH)
+    line_numbers: StrictBool | None = None
+    highlight_lines: list[StrictInt] | None = Field(default=None, max_length=MAX_CODE_LINES)
     output: Output | None = None
 
 
@@ -51,6 +58,10 @@ RESERVED_KEYS = frozenset(
         "icon_upload",
         "image_url",
         "icon_url",
+        "code",
+        "language",
+        "line_numbers",
+        "highlight_lines",
         "output",
     }
 )
@@ -121,6 +132,7 @@ class TemplateInfo(BaseModel):
     limits: dict[str, int] = Field(default_factory=dict)
     accepts_image: bool = False
     accepts_icon: bool = False
+    accepts_code: bool = False
 
 
 class BundleInfo(BaseModel):

@@ -3,7 +3,7 @@ import base64
 import pytest
 
 from app.config import settings
-from tests.conftest import AUTH, CARD_IMAGE, CONTENT, image_base64, svg_base64
+from tests.conftest import AUTH, CARD_IMAGE, CONTENT, SNIPPET, image_base64, svg_base64
 
 
 def slide(**fields) -> dict:
@@ -18,6 +18,18 @@ async def test_a_valid_document_reaches_the_renderer(client):
     response = await post(client, {"slides": [slide(pagination="2/3"), slide(pagination="3/3")]})
     assert response.status_code == 503
     assert response.json()["error"] == "Renderer is not available."
+
+
+async def test_a_slide_with_code_reaches_the_renderer(showcase_client):
+    code = {"template": SNIPPET, "headline": "Hallo", "code": "print(1)", "language": "python"}
+    response = await post(showcase_client, {"slides": [code, code]})
+    assert response.status_code == 503
+
+
+async def test_code_on_a_slide_without_code_is_located(client):
+    response = await post(client, {"slides": [slide(), slide(code="print(1)")]})
+    assert response.status_code == 400
+    assert response.json()["error"] == f"Slide 2: Template {CONTENT!r} does not accept code."
 
 
 async def test_a_document_needs_a_key(client):

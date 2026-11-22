@@ -9,6 +9,7 @@ from tests.conftest import (
     COVER,
     QUOTE,
     SHOWCASE,
+    SNIPPET,
     registry_of,
 )
 
@@ -84,6 +85,14 @@ async def test_icon_capability_is_reported(client):
         COVER: False,
         QUOTE: False,
     }
+
+
+async def test_code_capability_is_reported(client, showcase_client):
+    body = (await client.get("/v1/templates", headers=AUTH)).json()
+    assert not any(t["accepts_code"] for t in body["templates"])
+    body = (await showcase_client.get("/v1/templates", headers=AUTH)).json()
+    snippet = next(t for t in body["templates"] if t["id"] == SNIPPET)
+    assert snippet["accepts_code"] is True
 
 
 async def test_the_quote_requires_only_the_quote(client):

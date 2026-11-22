@@ -8,7 +8,7 @@ import pytest
 from PIL import Image
 
 from app.images import decode_icon, decode_image
-from tests.conftest import BUNDLE, CARD, CONTENT, QUOTE, SHOWCASE, registry_of
+from tests.conftest import BUNDLE, CARD, CONTENT, QUOTE, SHOWCASE, SNIPPET, registry_of
 
 
 async def test_debug_html_renders_without_auth(client, app):
@@ -161,6 +161,63 @@ async def test_debug_index_shows_a_template_with_its_required_fields_only(client
     links = await index_links(client)
     assert f"/v1/debug/html?template={CONTENT}&format=4:5&body=&pagination=&handle=" in links
     assert f"/v1/debug/html?template={QUOTE}&format=1:1&headline=&author=&role=&handle=" in links
+
+
+async def test_debug_html_shows_the_code_sample(showcase_client):
+    response = await showcase_client.get("/v1/debug/html", params={"template": SNIPPET})
+    assert response.status_code == 200
+    assert '<span class="line hl"><span class="ln">2</span>' in response.text
+
+
+async def test_debug_html_takes_the_code_from_the_query(showcase_client):
+    response = await showcase_client.get(
+        "/v1/debug/html",
+        params={
+            "template": SNIPPET,
+            "code": "x = 1\ny = 2",
+            "highlight_lines": "1",
+            "line_numbers": "false",
+        },
+    )
+    assert response.status_code == 200
+    assert (
+        '<span class="line hl">x <span class="tok-operator">=</span> '
+        '<span class="tok-number">1</span></span>' in response.text
+    )
+
+
+async def test_other_code_drops_the_highlighted_lines_of_the_sample(showcase_client):
+    response = await showcase_client.get(
+        "/v1/debug/html", params={"template": SNIPPET, "code": "x"}
+    )
+    assert response.status_code == 200
+    assert 'class="line hl"' not in response.text
+
+
+async def test_debug_html_refuses_highlight_lines_that_are_not_numbers(showcase_client):
+    response = await showcase_client.get(
+        "/v1/debug/html", params={"template": SNIPPET, "highlight_lines": "zwei"}
+    )
+    assert response.status_code == 400
+    assert response.json()["error"] == (
+        "highlight_lines takes line numbers separated by commas, such as 3,4."
+    )
+
+
+async def test_debug_html_refuses_code_for_a_template_without_code(client):
+    response = await client.get("/v1/debug/html", params={"template": CARD, "code": "x"})
+    assert response.status_code == 400
+    assert response.json()["error"] == f"Template {CARD!r} does not accept code."
+
+
+async def test_debug_index_offers_the_code_sample_without_its_options(showcase_client):
+    links = await index_links(showcase_client)
+    plain = f"/v1/debug/html?template={SNIPPET}&format=4:5&line_numbers=false&highlight_lines="
+    assert plain in links
+    response = await showcase_client.get(plain)
+    assert response.status_code == 200
+    assert '<span class="ln">' not in response.text
+    assert 'class="line hl"' not in response.text
 
 
 async def test_debug_index_groups_the_templates_by_bundle(client, app):

@@ -1,6 +1,7 @@
 import math
 import re
 import tomllib
+from collections.abc import Callable
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
@@ -8,6 +9,7 @@ from pathlib import Path
 from jinja2 import Environment, FileSystemLoader, StrictUndefined, TemplateNotFound
 from markupsafe import Markup, escape
 
+from app.code import Code, CodeError, CodeSample
 from app.fonts import FontSet, load_font_set
 from app.formats import Format, dimensions, filename_token
 from app.hyphenation import hyphenate
@@ -22,6 +24,7 @@ FONTS_DIR = "fonts"
 ASSETS_DIR = "assets"
 
 BUNDLE_KEYS = frozenset({"name", "description", "fonts"})
+CODE_SAMPLE_KEYS = frozenset({"code", "language", "line_numbers", "highlight_lines"})
 NAME = re.compile(r"[a-z0-9][a-z0-9-]*")
 NAME_RULE = "lowercase letters, digits and hyphens, starting with a letter or a digit"
 
@@ -50,6 +53,8 @@ class TemplateSpec:
     fallback_image: Path | None
     limits: dict[str, int]
     directory: Path
+    accepts_code: bool = False
+    code_sample: CodeSample | None = None
 
     def supports(self, fmt: Format) -> bool:
         return fmt in self.formats
@@ -71,6 +76,36 @@ def skipped(directory: Path) -> bool:
 
 def _inside(path: Path, root: Path) -> bool:
     return path.resolve().is_relative_to(root.resolve())
+
+
+def _code_sample(table: object, invalid: Callable[[str], RuntimeError]) -> CodeSample | None:
+    if table is None:
+        return None
+    if not isinstance(table, dict):
+        raise invalid("has a code_sample that is not a table")
+    unknown = sorted(set(table) - CODE_SAMPLE_KEYS)
+    if unknown:
+        raise invalid(f"has the unknown key {unknown[0]!r} in [code_sample]")
+    code = table.get("code")
+    language = table.get("language")
+    line_numbers = table.get("line_numbers", False)
+    highlight_lines = table.get("highlight_lines", [])
+    if not isinstance(code, str) or not code.strip():
+        raise invalid("has a [code_sample] without code")
+    if language is not None and not isinstance(language, str):
+        raise invalid("has a [code_sample] whose language is not a string")
+    if not isinstance(line_numbers, bool):
+        raise invalid("has a [code_sample] whose line_numbers is neither true nor false")
+    if not isinstance(highlight_lines, list) or any(
+        type(number) is not int for number in highlight_lines
+    ):
+        raise invalid("has a [code_sample] whose highlight_lines is not a list of line numbers")
+    sample = CodeSample(code, language, line_numbers, tuple(highlight_lines))
+    try:
+        sample.check()
+    except CodeError as exc:
+        raise invalid(f"has a [code_sample] that cannot be shown: {str(exc).rstrip('.')}") from None
+    return sample
 
 
 def _load_spec(directory: Path, bundle: str, bundle_dir: Path) -> TemplateSpec:
@@ -177,6 +212,13 @@ def _load_spec(directory: Path, bundle: str, bundle_dir: Path) -> TemplateSpec:
                 f"declares the fallback image {declared_fallback!r}, which is not a {ACCEPTED} file"
             ) from None
 
+    accepts_code = bool(raw.get("code", False))
+    code_sample = _code_sample(raw.get("code_sample"), invalid)
+    if accepts_code and code_sample is None:
+        raise invalid("sets code = true without a [code_sample] table")
+    if code_sample is not None and not accepts_code:
+        raise invalid("has a [code_sample] table without setting code = true")
+
     return TemplateSpec(
         id=template_id,
         bundle=bundle,
@@ -192,6 +234,8 @@ def _load_spec(directory: Path, bundle: str, bundle_dir: Path) -> TemplateSpec:
         fallback_image=fallback_image,
         limits=limits,
         directory=directory,
+        accepts_code=accepts_code,
+        code_sample=code_sample,
     )
 
 
@@ -393,6 +437,7 @@ class TemplateRegistry:
         fit_text: bool = True,
         image: str | None = None,
         icon: str | None = None,
+        code: Code | None = None,
     ) -> str:
         if not spec.supports(fmt):
             raise UnsupportedFormatError(fmt)
@@ -408,6 +453,7 @@ class TemplateRegistry:
             fields=fields,
             image=image,
             icon=icon,
+            code=code,
             css=Markup(self._css(bundle, spec)),
             font_css=Markup(bundle.fonts.css),
             font_checks=list(bundle.fonts.checks),

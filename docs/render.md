@@ -33,6 +33,10 @@ says where, see [Output as a URL](#output-as-a-url).
 | `icon_upload` | string | no | The id of an uploaded SVG icon, in place of `icon`. Needs storage |
 | `image_url` | string | no | An `https` URL of the image, in place of `image`, up to 2048 characters. The service fetches it itself, see [Images and icons from a URL](#images-and-icons-from-a-url) |
 | `icon_url` | string | no | An `https` URL of the SVG icon, in place of `icon`, fetched the same way |
+| `code` | string | per template | Source code for a template that sets `code = true`, which requires it; `GET /v1/templates` reports such a template with `accepts_code`. At most 14 lines of 48 columns after normalization, never hyphenated or wrapped, see [Code](#code) |
+| `language` | string | no | The language to highlight the code in, a short name of Pygments such as `python`, `javascript`, `typescript`, `bash`, `json`, `yaml`, `sql`, `html` or `diff`, in any case. Up to 40 characters. Omitted means plain text without highlighting. An unknown name is a `400` |
+| `line_numbers` | boolean | no | `true` puts the line numbers in front of the lines. Defaults to `false`. A string or a number is a `400` |
+| `highlight_lines` | array of integers | no | The lines to highlight, counted from 1 as the card numbers them, for example `[3, 4]`. A number outside the code, a string or a boolean is a `400` |
 | `output` | string | no | `binary`, the default, answers with the PNG; `url` stores it and answers with JSON, see [Output as a URL](#output-as-a-url). Needs storage |
 
 A template of another bundle may declare fields of its own: `GET /v1/templates` lists them, and
@@ -108,6 +112,36 @@ in. So every URL has to pass these rules:
 - **Nothing is kept.** The file is fetched for this one request and checked and embedded like base64 in the body; there is no cache. The log line of the fetch names its kind, size and redirects, never the URL, which often carries a token.
 - The service asks for the file uncompressed, with `Accept` naming the formats it takes, so an image CDN that picks the format by that header does not answer with AVIF.
 
+### Code
+
+`code` is a capability like `image`, not a template field: only a template whose `template.toml`
+sets `code = true` takes it, and such a template requires it. `code`, `language`, `line_numbers`
+or `highlight_lines` sent to any other template is a `400`; an empty string, `false` and an empty
+list count as not sent. The service highlights the code itself, with Pygments, so the page runs no
+script for it and the card looks the same on every host.
+
+Before anything is counted, the code is normalized:
+
+1. Every line break becomes `\n`, and every tab becomes spaces up to the next multiple of 4.
+2. Trailing whitespace goes, and so do blank lines at the start and at the end.
+3. Indentation that every line shares goes, so a snippet cut out of a deep block starts at the left edge.
+
+What is left must meet these rules, which are what keeps the code on the card, since code is never
+hyphenated or wrapped:
+
+| Rule | Otherwise |
+|------|-----------|
+| At most 14 lines | `400`, with the number of lines |
+| At most 48 columns per line, where a wide East Asian character takes two | `400`, naming the line |
+| No control character other than the line break and the tab, no invisible format character such as a bidi override or a zero-width space, no Unicode line or paragraph separator | `400`, naming the line and the character |
+| Every number in `highlight_lines` is a line of the code | `400` |
+| `language` is a name Pygments knows | `400` |
+
+The lines are numbered after normalization, as the card shows them, so `highlight_lines` and the
+messages count from the first line that is left. A template fits the code's font size to its box,
+between a floor and a maximum of its own, so a short snippet is set large and 14 full lines land
+at the floor without being clipped.
+
 ### Output as a URL
 
 With `"output": "url"` and [storage](storage/README.md), the service stores the PNG and answers
@@ -175,7 +209,7 @@ roughly 40 to 60 characters each, read well.
 |--------|------|-------------|
 | `200` | PNG bytes | `Content-Type: image/png`, plus `Content-Disposition: inline; filename="<bundle>-<template>_<format>_<id>.png"`, for example `demo-card_4x5_<id>.png`, and `Cache-Control: no-store` |
 | `200` | JSON | With `"output": "url"`: where the PNG is stored, see [Output as a URL](#output-as-a-url) |
-| `400` | `{"ok": false, "error": "..."}` | Invalid JSON, failed validation, unknown template, unsupported format, field the template does not accept, field that is not a string, field over the template's own limit, an image or icon the template does not take, an image and an icon together, a graphic from two sources, an image that is no PNG, JPEG or WebP, an icon that breaks one of the [SVG rules](#image-or-icon-on-a-content-slide), an unknown upload or one of the other kind, a URL against the [rules for URLs](#images-and-icons-from-a-url) |
+| `400` | `{"ok": false, "error": "..."}` | Invalid JSON, failed validation, unknown template, unsupported format, field the template does not accept, field that is not a string, field over the template's own limit, an image or icon the template does not take, an image and an icon together, a graphic from two sources, an image that is no PNG, JPEG or WebP, an icon that breaks one of the [SVG rules](#image-or-icon-on-a-content-slide), an unknown upload or one of the other kind, a URL against the [rules for URLs](#images-and-icons-from-a-url), code the template does not take, a template with code and a request without, code against the [rules for code](#code) |
 | `401` | `{"ok": false, "error": "Unauthorized."}` | Missing or wrong key |
 | `413` | `{"ok": false, "error": "..."}` | The decoded `image` or the file at `image_url` exceeds `MAX_IMAGE_BYTES`, or the decoded `icon` or the file at `icon_url` exceeds 256 KB |
 | `500` | `{"ok": false, "error": "..."}` | Render failure, or a font of the template's bundle that did not load while `STRICT_FONTS` is on |
