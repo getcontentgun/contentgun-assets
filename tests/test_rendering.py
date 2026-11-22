@@ -3,12 +3,14 @@ import pytest
 from app.errors import ApiError
 from app.formats import Format
 from app.rendering import (
+    check_render,
     resolve_fields,
     resolve_format,
     resolve_icon,
     resolve_image,
     resolve_template,
 )
+from app.schemas import RenderRequest
 from app.templating import TemplateRegistry
 from tests.conftest import (
     AUTH,
@@ -21,6 +23,7 @@ from tests.conftest import (
     SHOWCASE,
     image_base64,
     svg_base64,
+    write_bundle,
 )
 
 
@@ -241,7 +244,16 @@ async def test_unsupported_format_over_api(client):
 async def test_missing_headline_returns_400(client):
     response = await client.post("/v1/render", headers=AUTH, json={"format": "4:5"})
     assert response.status_code == 400
-    assert response.json()["error"].startswith("headline:")
+    assert response.json()["error"] == f"Field 'headline' is required by template {CARD!r}."
+
+
+def test_a_template_without_a_headline_takes_a_request_without_one(tmp_path):
+    toml = 'formats = ["4:5"]\nfields = ["note"]\nrequired = ["note"]\n[samples]\nnote = "Hallo"\n'
+    write_bundle(tmp_path, templates={"note": (toml, "{{ fields.note }}")})
+    card = check_render(
+        TemplateRegistry.load(tmp_path), RenderRequest(template="mini/note", note="Hallo")
+    )
+    assert card.fields == {"note": "Hallo"}
 
 
 async def test_too_long_headline_returns_400(client):

@@ -2,7 +2,7 @@
 <html lang="de" style="--w: {{ width }}px; --h: {{ height }}px;" data-format="{{ format }}">
   <head>
     <meta charset="utf-8" />
-    <title>{{ fields.headline }}</title>
+    <title>{% block title %}{{ fields.headline }}{% endblock %}</title>
     <style>
 {{ font_css }}
 {% include "_base/base.css" %}

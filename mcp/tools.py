@@ -86,7 +86,7 @@ class Tools:
         self,
         *,
         output_path: str,
-        headline: str,
+        headline: str | None = None,
         subline: str | None = None,
         handle: str | None = None,
         template: str | None = None,

@@ -111,7 +111,13 @@ def build_server(tools: Tools) -> MCPServer:
                 "path inside it. Must end in .png."
             ),
         ],
-        headline: Annotated[str, Field(description="The headline, 1 to 140 characters.")],
+        headline: Annotated[
+            str | None,
+            Field(
+                description="The headline, up to 140 characters, for a template that declares "
+                "headline; list_templates says which templates require it."
+            ),
+        ] = None,
         subline: Annotated[
             str | None,
             Field(description="The second line, for a template that declares subline."),

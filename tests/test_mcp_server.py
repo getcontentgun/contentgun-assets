@@ -91,7 +91,7 @@ async def test_three_tools_are_offered_with_their_hints(root):
         assert tools[name].annotations.read_only_hint is False
         assert tools[name].annotations.destructive_hint is False
     assert not tools["list_templates"].input_schema.get("required")
-    assert set(tools["render_card"].input_schema["required"]) == {"output_path", "headline"}
+    assert set(tools["render_card"].input_schema["required"]) == {"output_path"}
     assert {"pdf", "bundle"} <= set(tools["render_carousel"].input_schema["properties"])
     assert {"image_path", "icon_path"} <= set(tools["render_card"].input_schema["properties"])
     carousel = tools["render_carousel"].input_schema

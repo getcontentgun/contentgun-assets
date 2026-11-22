@@ -19,7 +19,7 @@ which are required, their defaults, and whether it takes an image or an icon. Ca
 you are unsure which template or fields to use, instead of guessing."""
 
 LIMITS = """\
-Limits the service enforces: headline 1 to 140 characters; subline, body and cta up to 200; \
+Limits the service enforces: headline up to 140 characters; subline, body and cta up to 200; \
 handle and topic up to 60; pagination up to 16. A template may set tighter limits of its own, \
 which list_templates reports as limits. A literal newline forces a line break. No emoji."""
 
@@ -79,7 +79,7 @@ def pagination_label(pattern: str) -> Callable[[int, int], str | None]:
 
 def card_body(
     *,
-    headline: str,
+    headline: str | None,
     subline: str | None,
     handle: str | None,
     template: str | None,

@@ -187,7 +187,13 @@ def _add_tools(server: MCPServer, tools: RemoteTools) -> None:
 
     @server.tool(description=RENDER_CARD, annotations=WRITES, structured_output=False)
     async def render_card(
-        headline: Annotated[str, Field(description="The headline, 1 to 140 characters.")],
+        headline: Annotated[
+            str | None,
+            Field(
+                description="The headline, up to 140 characters, for a template that declares "
+                "headline; list_templates says which templates require it."
+            ),
+        ] = None,
         subline: Annotated[
             str | None,
             Field(description="The second line, for a template that declares subline."),

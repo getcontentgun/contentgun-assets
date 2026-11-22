@@ -138,7 +138,7 @@ class RemoteTools:
         self,
         tenant: str,
         *,
-        headline: str,
+        headline: str | None = None,
         subline: str | None = None,
         handle: str | None = None,
         template: str | None = None,
@@ -173,7 +173,7 @@ class RemoteTools:
             tenant,
             template or "default",
             format or "default",
-            len(headline),
+            len(headline or ""),
             _source(graphic),
             stored.request_id,
         )

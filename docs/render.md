@@ -14,7 +14,7 @@ says where, see [Output as a URL](#output-as-a-url).
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `headline` | string | yes | 1 to 140 characters, or fewer where a template sets a limit of its own. A literal newline forces a line break |
+| `headline` | string | per template | Up to 140 characters, or fewer where a template sets a limit of its own. Required by every template that lists it in `required`, as every template of `demo` does; `GET /v1/templates` reports the required fields of each template. A literal newline forces a line break |
 | `subline` | string | no | Up to 200 characters. Omitted or empty removes the element. Declared by `demo/card`, `demo/card-image` and `demo/carousel-cover` |
 | `format` | string | no | `4:5` (1080x1350) on every template, `1:1` (1080x1080) on the carousel templates. The service also knows `9:16` (1080x1920) and `16:9` (1920x1080) for templates that declare them. Defaults to the template's first format |
 | `template` | string | no | A template id, `<bundle>/<template>`, see [Template bundles](bundles/README.md). Defaults to `DEFAULT_TEMPLATE` from the environment (`demo/card`). A name without its bundle is an unknown template |
@@ -137,7 +137,7 @@ to empty is a `400`.
 
 Four mechanisms keep text inside the card, in this order.
 
-1. **Character limits, enforced before rendering.** Headline 1 to 140, subline up to 200, handle and topic up to 60, pagination up to 16. Over the limit is a `400` and no image. A field a template declares without a typed counterpart, such as `body` or `cta`, is capped at 200. A template may set tighter limits of its own in the `[limits]` table of its `template.toml`, which `GET /v1/templates` reports as `limits`.
+1. **Character limits, enforced before rendering.** Headline up to 140, subline up to 200, handle and topic up to 60, pagination up to 16. Over the limit is a `400` and no image. A field a template declares without a typed counterpart, such as `body` or `cta`, is capped at 200. A template may set tighter limits of its own in the `[limits]` table of its `template.toml`, which `GET /v1/templates` reports as `limits`.
 2. **Hyphenation.** Every text field except the handle and the pagination is given German break points as soft hyphens before rendering, so a long compound breaks at a syllable and shows a hyphen.
 3. **Automatic font sizing.** On `demo/card` and `demo/card-image` the headline shrinks between 104px and 40px and the subline between 40px and 24px, until the text fits its box. The carousel templates have ranges of their own, listed under [Carousel text limits](#carousel-text-limits). Nothing is truncated.
 4. **Clipping**, if the text still does not fit at the minimum size. The boxes are `overflow: hidden`.

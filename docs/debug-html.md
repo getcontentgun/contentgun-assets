@@ -21,7 +21,7 @@ variant, so most of the time there is no URL to type.
 | `image_url` | the template's fallback image | Image for a template that accepts one, as a URL that the browser loads. Ignored by templates without the capability |
 | `icon_url` | none | SVG icon for a template that accepts one, as a URL that the browser loads, for example from jsDelivr. Ignored by templates without the capability. Together with `image_url` it is a `400`, as on the render route |
 | `fit` | `1` | `0` disables the fit-text script, so the CSS font sizes apply unchanged |
-| any field the template declares | the field's value in the `[samples]` table of the template's `template.toml`, else its default | The same limits as in the render request: `headline` 1 to 140 characters, `handle` and `topic` up to 60, `pagination` up to 16, every other field up to 200, and whatever tighter limits the template sets in `[limits]`. Empty removes an optional element |
+| any field the template declares | the field's value in the `[samples]` table of the template's `template.toml`, else its default | The same limits as in the render request: `headline` up to 140 characters, `handle` and `topic` up to 60, `pagination` up to 16, every other field up to 200, and whatever tighter limits the template sets in `[limits]`. Empty removes an optional element |
 
 Every query parameter other than the six above is taken as a field. One the template does not
 declare, such as a `subline` left over after switching to `demo/carousel-content`, is a `400`

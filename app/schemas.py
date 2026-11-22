@@ -18,7 +18,7 @@ class RenderRequest(BaseModel):
     template: str | None = None
     format: Format | None = None
 
-    headline: str = Field(min_length=1, max_length=140)
+    headline: str | None = Field(default=None, max_length=140)
     subline: str | None = Field(default=None, max_length=MAX_FIELD_LENGTH)
     handle: str | None = Field(default=None, max_length=60)
     # The cover's kicker is not fitted, so above this a long run of wide capitals squeezes the

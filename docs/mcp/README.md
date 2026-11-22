@@ -80,7 +80,7 @@ id, plus a JPEG preview 540 px wide.
 | Parameter | Required | Description |
 |-----------|----------|-------------|
 | `output_path` | yes | Relative to `ASSETS_OUTPUT_ROOT`, or absolute inside it. Must end in `.png`. Missing folders are created |
-| `headline` | yes | Passed through |
+| `headline` | no | Passed through. Required by the templates that list it in `required`, which `list_templates` reports |
 | `subline` | no | Passed through |
 | `handle` | no | Passed through, never filled in |
 | `template` | no | A template id from `list_templates`, `<bundle>/<template>`. Omitted means the service's `DEFAULT_TEMPLATE` |
