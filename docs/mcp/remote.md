@@ -67,7 +67,15 @@ host of `PUBLIC_FILES_URL`, for example `files.contentgun.de`, under Settings, C
 so. The same entry lets Claude download a result into its environment and offer it as a file.
 
 `extra_fields` takes the further fields a template declares, but none of the keys the request
-sets itself, such as `template`, `image` or `output`.
+sets itself, such as `template`, `image`, `code` or `output`.
+
+### Code
+
+`render_card` takes `code`, `language`, `line_numbers` and `highlight_lines` for a template that
+accepts code, which `list_templates` reports as `accepts_code`, such as `demo/code`. They go to
+the service as they are, which checks and highlights the code, see
+[Code](../render.md#code). The tool's description gives the model the limit of 14 lines of 48
+columns and asks for the code without Markdown fences.
 
 ### Failures
 

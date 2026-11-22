@@ -26,8 +26,13 @@ from cards import (
     CAROUSEL_CONTENT,
     CAROUSEL_COVER,
     CAROUSEL_WRITING,
+    CODE,
+    CODE_FIELD,
     DEFAULT_PAGINATION,
+    HIGHLIGHT_LINES_FIELD,
+    LANGUAGE_FIELD,
     LIMITS,
+    LINE_NUMBERS_FIELD,
     LIST_TEMPLATES,
     MAX_CAROUSEL_SLIDES,
     CarouselClosing,
@@ -91,6 +96,8 @@ uses the team's default template. Every template's description says what it is f
 fill its fields. Fields other than headline, subline and handle go into extra_fields.
 
 {GRAPHIC_SOURCES}
+
+{CODE}
 
 For a carousel, use render_carousel."""
 
@@ -228,6 +235,12 @@ def _add_tools(server: MCPServer, tools: RemoteTools) -> None:
         icon_upload: Annotated[
             str | None, Field(description="The upload_id of an SVG sent with create_upload.")
         ] = None,
+        code: Annotated[str | None, Field(description=CODE_FIELD)] = None,
+        language: Annotated[str | None, Field(description=LANGUAGE_FIELD)] = None,
+        line_numbers: Annotated[bool | None, Field(description=LINE_NUMBERS_FIELD)] = None,
+        highlight_lines: Annotated[
+            list[int] | None, Field(description=HIGHLIGHT_LINES_FIELD)
+        ] = None,
         extra_fields: Annotated[
             dict[str, str] | None,
             Field(description="Further fields the template declares, such as body or cta."),
@@ -247,6 +260,10 @@ def _add_tools(server: MCPServer, tools: RemoteTools) -> None:
                 icon_svg=icon_svg,
                 icon_url=icon_url,
                 icon_upload=icon_upload,
+                code=code,
+                language=language,
+                line_numbers=line_numbers,
+                highlight_lines=highlight_lines,
             )
         )
         return _content(result)

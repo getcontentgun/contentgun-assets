@@ -10,6 +10,7 @@ import pytest
 from mcp import Client, StdioServerParameters
 from PIL import Image
 
+from app.code import MAX_CODE_COLUMNS, MAX_CODE_LINES
 from app.schemas import MAX_FIELD_LENGTH, RenderRequest
 from client import AssetsClient
 from config import Config
@@ -87,12 +88,17 @@ def typed_limit(field: str) -> int:
         "quote",
         "author",
         "role",
+        "filename",
     ],
 )
 def test_the_limits_in_the_descriptions_match_the_service(field):
     expected = typed_limit(field) if field in RenderRequest.model_fields else MAX_FIELD_LENGTH
     clause = next(part for part in LIMITS.split(";") if field in part)
     assert str(expected) in clause
+
+
+def test_the_code_limits_in_the_descriptions_match_the_service():
+    assert f"code up to {MAX_CODE_LINES} lines of {MAX_CODE_COLUMNS} columns" in LIMITS
 
 
 async def test_three_tools_are_offered_with_their_hints(root):
@@ -106,6 +112,8 @@ async def test_three_tools_are_offered_with_their_hints(root):
     assert set(tools["render_card"].input_schema["required"]) == {"output_path"}
     assert {"pdf", "bundle"} <= set(tools["render_carousel"].input_schema["properties"])
     assert {"image_path", "icon_path"} <= set(tools["render_card"].input_schema["properties"])
+    code = {"code", "language", "line_numbers", "highlight_lines"}
+    assert code <= set(tools["render_card"].input_schema["properties"])
     carousel = tools["render_carousel"].input_schema
     slide = carousel["$defs"]["CarouselSlide"]["properties"]
     assert {"image_path", "icon_path"} <= set(slide)

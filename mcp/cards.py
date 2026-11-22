@@ -15,14 +15,28 @@ DEFAULT_PAGINATION = "{page}/{pages}"
 LIST_TEMPLATES = """\
 List the templates the contentgun-assets service renders: for every template its id \
 (bundle/template), its bundle, description, formats with pixel sizes, the fields it accepts, \
-which are required, their defaults, and whether it takes an image or an icon. Call it whenever \
-you are unsure which template or fields to use, instead of guessing."""
+which are required, their defaults, and whether it takes an image, an icon or code. Call it \
+whenever you are unsure which template or fields to use, instead of guessing."""
 
 LIMITS = """\
 Limits the service enforces: headline up to 140 characters; subline, body, cta and quote up to \
-200; handle, topic and author up to 60; role up to 80; pagination up to 16. A template may set \
-tighter limits of its own, which list_templates reports as limits. A literal newline forces a \
-line break. No emoji."""
+200; handle, topic, author and filename up to 60; role up to 80; pagination up to 16; code up to \
+14 lines of 48 columns. A template may set tighter limits of its own, which list_templates \
+reports as limits. A literal newline forces a line break. No emoji."""
+
+CODE = """\
+A template that accepts code, which list_templates reports as accepts_code, needs code: the \
+source as plain text, with its language, a short name such as python, javascript, typescript, \
+bash, json, sql or diff, and optionally line_numbers and highlight_lines. The service highlights \
+it. Cut the code down to the lines that make the point, and send it without Markdown fences."""
+
+CODE_FIELD = "Source code as plain text, for a template that accepts code."
+LANGUAGE_FIELD = (
+    "The language of the code, a short name such as python, javascript or bash. Without one the "
+    "code is not highlighted."
+)
+LINE_NUMBERS_FIELD = "True puts line numbers in front of the lines of the code."
+HIGHLIGHT_LINES_FIELD = "Lines of the code to highlight, counted from 1, for example [3, 4]."
 
 CAROUSEL_WRITING = """\
 Write it like this: the cover's headline is the hook, about six words, its topic a short kicker \
@@ -61,7 +75,7 @@ class CarouselClosing(BaseModel):
     )
 
 
-def present(values: Mapping[str, str | None]) -> dict[str, str]:
+def present(values: Mapping[str, Any]) -> dict[str, Any]:
     return {key: value for key, value in values.items() if value is not None}
 
 
@@ -87,6 +101,10 @@ def card_body(
     format: str | None,
     extra_fields: Mapping[str, str] | None,
     reserved: Mapping[str, str | None],
+    code: str | None = None,
+    language: str | None = None,
+    line_numbers: bool | None = None,
+    highlight_lines: Sequence[int] | None = None,
 ) -> dict[str, Any]:
     """The body of one card. reserved maps every key extra_fields must not set to the parameter
     that sets it, or to None when no parameter does."""
@@ -103,6 +121,10 @@ def card_body(
             "headline": headline,
             "subline": subline,
             "handle": handle,
+            "code": code,
+            "language": language,
+            "line_numbers": line_numbers,
+            "highlight_lines": None if highlight_lines is None else list(highlight_lines),
         }
     )
     body.update(extra)

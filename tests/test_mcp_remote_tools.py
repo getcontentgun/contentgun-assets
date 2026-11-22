@@ -245,6 +245,54 @@ async def test_extra_fields_cannot_set_a_reserved_key(key):
     assert service.requests == []
 
 
+async def test_code_in_extra_fields_points_at_its_parameter():
+    service = FakeService()
+    async with connected(service) as (remote, token):
+        arguments = {"headline": "Hallo", "extra_fields": {"code": "x"}}
+        result = await tool(remote.client, token, "render_card", arguments)
+    assert result["isError"] is True
+    assert text_of(result) == (
+        "extra_fields must not contain 'code'. Use the code parameter instead."
+    )
+
+
+async def test_the_code_and_its_options_reach_the_body():
+    service = FakeService()
+    async with connected(service) as (remote, token):
+        await tool(
+            remote.client,
+            token,
+            "render_card",
+            {
+                "headline": "Ein Aufruf",
+                "template": "demo/code",
+                "code": "print(1)",
+                "language": "python",
+                "line_numbers": True,
+                "highlight_lines": [1],
+            },
+        )
+    body = service.bodies[0]
+    assert body["code"] == "print(1)"
+    assert body["language"] == "python"
+    assert body["line_numbers"] is True
+    assert body["highlight_lines"] == [1]
+
+
+async def test_a_card_without_a_headline_reaches_the_body():
+    service = FakeService()
+    async with connected(service) as (remote, token):
+        result = await tool(
+            remote.client,
+            token,
+            "render_card",
+            {"template": "demo/quote", "extra_fields": {"quote": "Kurz."}},
+        )
+    assert result["isError"] is False
+    assert "headline" not in service.bodies[0]
+    assert service.bodies[0]["quote"] == "Kurz."
+
+
 async def test_further_fields_reach_the_body():
     service = FakeService()
     async with connected(service) as (remote, token):

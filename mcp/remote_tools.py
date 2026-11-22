@@ -43,10 +43,10 @@ RESERVED: dict[str, str | None] = {
     "icon": "icon_svg, icon_url or icon_upload",
     "icon_url": "icon_url",
     "icon_upload": "icon_upload",
-    "code": None,
-    "language": None,
-    "line_numbers": None,
-    "highlight_lines": None,
+    "code": "code",
+    "language": "language",
+    "line_numbers": "line_numbers",
+    "highlight_lines": "highlight_lines",
     "output": None,
 }
 GRAPHICS = ("image_url", "image_upload", "icon_svg", "icon_url", "icon_upload")
@@ -153,6 +153,10 @@ class RemoteTools:
         icon_svg: str | None = None,
         icon_url: str | None = None,
         icon_upload: str | None = None,
+        code: str | None = None,
+        language: str | None = None,
+        line_numbers: bool | None = None,
+        highlight_lines: list[int] | None = None,
     ) -> Result:
         client = self._client.for_tenant(tenant)
         graphic = graphic_fields(image_url, image_upload, icon_svg, icon_url, icon_upload)
@@ -164,6 +168,10 @@ class RemoteTools:
             format=format,
             extra_fields=extra_fields,
             reserved=RESERVED,
+            code=code,
+            language=language,
+            line_numbers=line_numbers,
+            highlight_lines=highlight_lines,
         )
         body.update(graphic)
         stored = await client.render_stored(body)

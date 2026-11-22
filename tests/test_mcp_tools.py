@@ -132,7 +132,39 @@ async def test_render_card_passes_template_format_and_extra_fields(tools, servic
     ]
 
 
-@pytest.mark.parametrize("key", ["headline", "template", "image", "icon", "handle"])
+async def test_render_card_passes_the_code_and_its_options(tools, service):
+    await tools.render_card(
+        output_path="code.png",
+        headline="Ein Aufruf",
+        template="brand/code",
+        code="print(1)",
+        language="python",
+        line_numbers=True,
+        highlight_lines=[1],
+    )
+    assert service.bodies == [
+        {
+            "template": "brand/code",
+            "headline": "Ein Aufruf",
+            "code": "print(1)",
+            "language": "python",
+            "line_numbers": True,
+            "highlight_lines": [1],
+        }
+    ]
+
+
+async def test_render_card_works_without_a_headline(tools, service, root):
+    result = await tools.render_card(
+        output_path="quote.png", template="brand/quote", extra_fields={"quote": "Kurz."}
+    )
+    assert service.bodies == [{"template": "brand/quote", "quote": "Kurz."}]
+    assert str(root / "quote.png") in result.summary
+
+
+@pytest.mark.parametrize(
+    "key", ["headline", "template", "image", "icon", "handle", "code", "highlight_lines"]
+)
 async def test_extra_fields_cannot_replace_a_named_parameter(tools, service, key):
     with pytest.raises(AssetsError, match=f"must not contain '{key}'"):
         await tools.render_card(output_path="card.png", headline="Hallo", extra_fields={key: "x"})

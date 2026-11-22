@@ -13,8 +13,13 @@ from cards import (
     CAROUSEL_CONTENT,
     CAROUSEL_COVER,
     CAROUSEL_WRITING,
+    CODE,
+    CODE_FIELD,
     DEFAULT_PAGINATION,
+    HIGHLIGHT_LINES_FIELD,
+    LANGUAGE_FIELD,
     LIMITS,
+    LINE_NUMBERS_FIELD,
     LIST_TEMPLATES,
     MAX_CAROUSEL_SLIDES,
     CarouselClosing,
@@ -50,6 +55,8 @@ uses its default template. Every template's description says what it is for and 
 its fields. Fields other than headline, subline and handle go into extra_fields. image_path only \
 works with a template that accepts an image, icon_path, an SVG pictogram, only with one that \
 accepts an icon; list_templates reports both as accepts_image and accepts_icon.
+
+{CODE}
 
 For a carousel, use render_carousel."""
 
@@ -145,6 +152,12 @@ def build_server(tools: Tools) -> MCPServer:
                 f"inside one of these folders: {image_roots}."
             ),
         ] = None,
+        code: Annotated[str | None, Field(description=CODE_FIELD)] = None,
+        language: Annotated[str | None, Field(description=LANGUAGE_FIELD)] = None,
+        line_numbers: Annotated[bool | None, Field(description=LINE_NUMBERS_FIELD)] = None,
+        highlight_lines: Annotated[
+            list[int] | None, Field(description=HIGHLIGHT_LINES_FIELD)
+        ] = None,
         extra_fields: Annotated[
             dict[str, str] | None,
             Field(description="Further fields the template declares, such as body or cta."),
@@ -161,6 +174,10 @@ def build_server(tools: Tools) -> MCPServer:
                 format=format,
                 image_path=image_path,
                 icon_path=icon_path,
+                code=code,
+                language=language,
+                line_numbers=line_numbers,
+                highlight_lines=highlight_lines,
                 extra_fields=extra_fields,
                 overwrite=overwrite,
             )

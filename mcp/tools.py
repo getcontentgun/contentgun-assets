@@ -33,6 +33,10 @@ RESERVED = {
     "headline": "headline",
     "subline": "subline",
     "handle": "handle",
+    "code": "code",
+    "language": "language",
+    "line_numbers": "line_numbers",
+    "highlight_lines": "highlight_lines",
 }
 SLIDE_FILE = re.compile(r"(\d{2})\.png")
 PDF_FILE = "carousel.pdf"
@@ -93,6 +97,10 @@ class Tools:
         format: str | None = None,
         image_path: str | None = None,
         icon_path: str | None = None,
+        code: str | None = None,
+        language: str | None = None,
+        line_numbers: bool | None = None,
+        highlight_lines: list[int] | None = None,
         extra_fields: dict[str, str] | None = None,
         overwrite: bool = False,
     ) -> Rendering:
@@ -106,6 +114,10 @@ class Tools:
             format=format,
             extra_fields=extra_fields,
             reserved=RESERVED,
+            code=code,
+            language=language,
+            line_numbers=line_numbers,
+            highlight_lines=highlight_lines,
         )
         if graphic is not None:
             body[graphic.key] = graphic.encoded
@@ -119,7 +131,7 @@ class Tools:
             "request_id=%s",
             template or "default",
             format or "default",
-            len(headline),
+            len(headline or ""),
             _bytes([graphic], "image"),
             _bytes([graphic], "icon"),
             rendered.request_id,

@@ -87,7 +87,11 @@ id, plus a JPEG preview 540 px wide.
 | `format` | no | Omitted means the template's first format |
 | `image_path` | no | An image inside `ASSETS_IMAGE_ROOTS`, sent base64-encoded. Only templates with `accepts_image`; the template's description says what it does with the image |
 | `icon_path` | no | An SVG pictogram inside `ASSETS_IMAGE_ROOTS`, sent base64-encoded. Only templates with `accepts_icon`. Its color goes into `extra_fields` as `icon_color`. Together with `image_path` it is refused |
-| `extra_fields` | no | Further fields the template declares, such as `body`, `cta`, `topic`, `pagination` or `icon_color`, as `list_templates` reports them. A key that duplicates a parameter above, or `image` or `icon`, is refused |
+| `code` | no | Source code for a template with `accepts_code`, such as `demo/code`. Passed through; the service checks and highlights it, see [Code](../render.md#code) |
+| `language` | no | The language of the code, a short name of Pygments such as `python`. Passed through |
+| `line_numbers` | no | `true` numbers the lines of the code. Passed through |
+| `highlight_lines` | no | The lines of the code to highlight, counted from 1. Passed through |
+| `extra_fields` | no | Further fields the template declares, such as `body`, `cta`, `topic`, `pagination`, `icon_color`, `quote` or `filename`, as `list_templates` reports them. A key that duplicates a parameter above, or `image` or `icon`, is refused |
 | `overwrite` | no | Default `false`: an existing file is an error |
 
 ### `render_carousel`
