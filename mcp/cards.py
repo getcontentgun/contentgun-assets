@@ -19,9 +19,10 @@ which are required, their defaults, and whether it takes an image or an icon. Ca
 you are unsure which template or fields to use, instead of guessing."""
 
 LIMITS = """\
-Limits the service enforces: headline up to 140 characters; subline, body and cta up to 200; \
-handle and topic up to 60; pagination up to 16. A template may set tighter limits of its own, \
-which list_templates reports as limits. A literal newline forces a line break. No emoji."""
+Limits the service enforces: headline up to 140 characters; subline, body, cta and quote up to \
+200; handle, topic and author up to 60; role up to 80; pagination up to 16. A template may set \
+tighter limits of its own, which list_templates reports as limits. A literal newline forces a \
+line break. No emoji."""
 
 CAROUSEL_WRITING = """\
 Write it like this: the cover's headline is the hook, about six words, its topic a short kicker \

@@ -14,7 +14,7 @@ says where, see [Output as a URL](#output-as-a-url).
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `headline` | string | per template | Up to 140 characters, or fewer where a template sets a limit of its own. Required by every template that lists it in `required`, as every template of `demo` does; `GET /v1/templates` reports the required fields of each template. A literal newline forces a line break |
+| `headline` | string | per template | Up to 140 characters, or fewer where a template sets a limit of its own. Required by every template that lists it in `required`, as every template of `demo` except `demo/quote` does; `GET /v1/templates` reports the required fields of each template. A literal newline forces a line break |
 | `subline` | string | no | Up to 200 characters. Omitted or empty removes the element. Declared by `demo/card`, `demo/card-image` and `demo/carousel-cover` |
 | `format` | string | no | `4:5` (1080x1350) on every template, `1:1` (1080x1080) on the carousel templates. The service also knows `9:16` (1080x1920) and `16:9` (1920x1080) for templates that declare them. Defaults to the template's first format |
 | `template` | string | no | A template id, `<bundle>/<template>`, see [Template bundles](bundles/README.md). Defaults to `DEFAULT_TEMPLATE` from the environment (`demo/card`). A name without its bundle is an unknown template |
@@ -22,8 +22,11 @@ says where, see [Output as a URL](#output-as-a-url).
 | `topic` | string | no | The label above the hook, in capitals. Up to 60 characters. Omitted or empty removes the element. Declared by `demo/carousel-cover` |
 | `body` | string | no | The text under the headline of a content slide. Up to 200 characters. Omitted or empty removes the element. Declared by `demo/carousel-content` |
 | `cta` | string | no | The open question under the headline of the closing slide. Up to 200 characters. Omitted or empty removes the element. Declared by `demo/carousel-closing` |
-| `pagination` | string | no | Free text at the right end of the header row, shown exactly as sent, for example `"3/7"`, `"3 von 7"` or `"3"`. Up to 16 characters, never wrapped. A JSON number is a `400`. Omitted or empty removes the element. Declared by `demo/carousel-content` and `demo/carousel-closing`, see [Pagination](#pagination) |
-| `image` | string | no | Base64 image for `demo/card-image` and `demo/carousel-content`, with or without a `data:image/...;base64,` prefix. PNG, JPEG or WebP, up to `MAX_IMAGE_BYTES` (8 MB by default) after decoding. `demo/card-image` uses it as its background and falls back to a fallback image of its own without one; `demo/carousel-content` shows it under the text, see [Image or icon on a content slide](#image-or-icon-on-a-content-slide) |
+| `quote` | string | per template | The quote itself, without quotation marks: the card draws its own. Up to 200 characters. Required by `demo/quote`, see [Quote card](#quote-card) |
+| `author` | string | no | Who said the quote. Up to 60 characters. Omitted or empty removes the element. Declared by `demo/quote` |
+| `role` | string | no | The author's role, company or the source of the quote, such as a talk. Up to 80 characters. Omitted or empty removes the element. Declared by `demo/quote` |
+| `pagination` | string | no | Free text at the right end of the header row, shown exactly as sent, for example `"3/7"`, `"3 von 7"` or `"3"`. Up to 16 characters, never wrapped. A JSON number is a `400`. Omitted or empty removes the element. Declared by `demo/carousel-content`, `demo/carousel-closing` and `demo/quote`, see [Pagination](#pagination) |
+| `image` | string | no | Base64 image for `demo/card-image`, `demo/carousel-content` and `demo/quote`, with or without a `data:image/...;base64,` prefix. PNG, JPEG or WebP, up to `MAX_IMAGE_BYTES` (8 MB by default) after decoding. `demo/card-image` uses it as its background and falls back to a fallback image of its own without one; `demo/carousel-content` shows it under the text, see [Image or icon on a content slide](#image-or-icon-on-a-content-slide); `demo/quote` crops it to a round portrait next to the author |
 | `icon` | string | no | Base64 SVG pictogram for `demo/carousel-content`, with or without a `data:image/svg+xml;base64,` prefix, up to 256 KB after decoding. Drawn under the text as a silhouette in one color. Never together with `image`. See [Image or icon on a content slide](#image-or-icon-on-a-content-slide) for what an SVG has to meet |
 | `icon_color` | string | no | The color of the icon: `accent`, the amber `#f2b33d` and the default, or `text`, the off-white text color `#f3efe6`. Anything else is a `400`. Without an icon it has no effect. Declared by `demo/carousel-content` |
 | `image_upload` | string | no | The id of an uploaded image, in place of `image`, see [Uploads](#uploads). Needs storage |
@@ -40,8 +43,8 @@ is empty or `null`; so is a field that is not a string.
 ### Images and icons
 
 `image` and `icon` are not template fields but capabilities. Only a template whose
-`template.toml` sets `image = true` accepts an image, today `demo/card-image` and
-`demo/carousel-content`, and only one that sets `icon = true` accepts an icon, today
+`template.toml` sets `image = true` accepts an image, today `demo/card-image`,
+`demo/carousel-content` and `demo/quote`, and only one that sets `icon = true` accepts an icon, today
 `demo/carousel-content`. Sending either to a template without the capability is a `400` rather
 than a silently ignored field, and `GET /v1/templates` reports the capabilities as
 `accepts_image` and `accepts_icon`. A request carries an image or an icon, never both: both is a
@@ -137,9 +140,9 @@ to empty is a `400`.
 
 Four mechanisms keep text inside the card, in this order.
 
-1. **Character limits, enforced before rendering.** Headline up to 140, subline up to 200, handle and topic up to 60, pagination up to 16. Over the limit is a `400` and no image. A field a template declares without a typed counterpart, such as `body` or `cta`, is capped at 200. A template may set tighter limits of its own in the `[limits]` table of its `template.toml`, which `GET /v1/templates` reports as `limits`.
+1. **Character limits, enforced before rendering.** Headline up to 140, subline up to 200, handle, topic and author up to 60, role up to 80, pagination up to 16. Over the limit is a `400` and no image. A field a template declares without a typed counterpart, such as `body`, `cta` or `quote`, is capped at 200. A template may set tighter limits of its own in the `[limits]` table of its `template.toml`, which `GET /v1/templates` reports as `limits`.
 2. **Hyphenation.** Every text field except the handle and the pagination is given German break points as soft hyphens before rendering, so a long compound breaks at a syllable and shows a hyphen.
-3. **Automatic font sizing.** On `demo/card` and `demo/card-image` the headline shrinks between 104px and 40px and the subline between 40px and 24px, until the text fits its box. The carousel templates have ranges of their own, listed under [Carousel text limits](#carousel-text-limits). Nothing is truncated.
+3. **Automatic font sizing.** On `demo/card` and `demo/card-image` the headline shrinks between 104px and 40px and the subline between 40px and 24px, until the text fits its box. The carousel templates and `demo/quote` have ranges of their own, listed under [Carousel text limits](#carousel-text-limits) and [Quote text limits](#quote-text-limits). Nothing is truncated.
 4. **Clipping**, if the text still does not fit at the minimum size. The boxes are `overflow: hidden`.
 
 **Step 4 is not reachable through the API**, because the character limit always bites first. The
@@ -436,6 +439,50 @@ full size in every case.
 formats and with or without a graphic**, with the same exception for forced line breaks.
 Re-measure both formats, with and without a graphic, after changing a box, a size, a font or a cap;
 `tests/test_text_limits.py` fails once a run of `W` at the limits no longer fits.
+
+## Quote card
+
+`demo/quote` sets a quote for testimonials, customer voices and quotes from talks or interviews,
+in `4:5` and `1:1`, so it also works as a slide of a carousel next to the carousel templates:
+
+| Field | Required | On the card |
+|-------|----------|-------------|
+| `headline` | no | The hook above the quote, such as `"Vier Stunden pro Woche gespart"`. Up to 80 characters, the template's own limit. Without it the quote takes its room |
+| `quote` | yes | The quote, without quotation marks: an amber quotation mark stands above the card's text |
+| `author` | no | Under the quote, in the headline font |
+| `role` | no | Under the author, in the muted text color: role and company, or the source of the quote |
+| `image` | no | A round portrait left of the author and role, cropped to fill the circle. `image_upload` and `image_url` work as well |
+| `handle`, `pagination` | no | The header row, as on the content slides |
+
+Every element but the quote disappears when its field is omitted or empty, so a card with only a
+quote is a valid request:
+
+```json
+{ "template": "demo/quote", "format": "1:1", "quote": "Seit wir unsere Karten aus Vorlagen bauen, geht kein Beitrag mehr in die dritte Abstimmungsrunde.", "author": "Maria Beispiel", "role": "Leiterin Marketing, Beispiel GmbH", "handle": "@contentgun" }
+```
+
+### Quote text limits
+
+The headline is fitted from 64px down to 40px, the quote from 56px down to 24px, in Inter.
+`author` and `role` are not fitted: they wrap at a fixed 30px and 24px, and their room comes out of
+the quote's, so their caps are part of the measurement. A portrait narrows them, which makes it the
+worst case.
+
+Measured in the real renderer, in px, with the portrait and with every field at its limit (80 in
+the headline, 200 in the quote, 60 in `author`, 80 in `role`), once with running text and once as
+a run of `W`. Where a cell holds two numbers, they are headline / quote. Nothing was clipped in any
+case, and the stage never overflowed:
+
+| Card | Format | Running text at every limit | `W` at every limit |
+|------|--------|-----------------------------|--------------------|
+| with a headline | `4:5` | 64 / 43 | 44 / 27 |
+| with a headline | `1:1` | 55 / 33 | 41 / 24 |
+| quote only | `4:5` | 56 | 35 |
+| quote only | `1:1` | 47 | 35 |
+
+Without a headline the quote box grows from 31% of the stage to 62% at `4:5`, and from 27% to 54%
+at `1:1`. `tests/test_text_limits.py` measures both cards in both formats, with and without the
+portrait.
 
 ## Notes
 

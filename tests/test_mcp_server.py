@@ -75,7 +75,19 @@ def typed_limit(field: str) -> int:
 
 
 @pytest.mark.parametrize(
-    "field", ["headline", "subline", "handle", "topic", "pagination", "body", "cta"]
+    "field",
+    [
+        "headline",
+        "subline",
+        "handle",
+        "topic",
+        "pagination",
+        "body",
+        "cta",
+        "quote",
+        "author",
+        "role",
+    ],
 )
 def test_the_limits_in_the_descriptions_match_the_service(field):
     expected = typed_limit(field) if field in RenderRequest.model_fields else MAX_FIELD_LENGTH

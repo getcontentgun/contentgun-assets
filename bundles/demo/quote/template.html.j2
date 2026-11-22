@@ -1,0 +1,30 @@
+{% extends "_base/base.html.j2" %}
+
+{% block title %}{{ fields.headline or fields.quote }}{% endblock %}
+
+{% block stage %}
+        <div class="quote-mark" aria-hidden="true">{{ inline_svg("quote.svg") }}</div>
+        {% if fields.headline %}
+        <div class="fit-box headline-box" id="headline-box">
+          <h1 class="headline" id="headline" data-fit="headline">{{ fields.headline | hyphenate }}</h1>
+        </div>
+        {% endif %}
+        <div class="fit-box quote-box" id="quote-box">
+          <p class="copy quote" id="quote" data-fit="quote">{{ fields.quote | hyphenate }}</p>
+        </div>
+        {% if image or fields.author or fields.role %}
+        <div class="source" id="source">
+          {% if image %}<img class="portrait" id="portrait" src="{{ image }}" alt="" />{% endif %}
+          {% if fields.author or fields.role %}
+          <div class="source-text">
+            {% if fields.author %}<p class="author" id="author">{{ fields.author | hyphenate }}</p>{% endif %}
+            {% if fields.role %}<p class="role" id="role">{{ fields.role | hyphenate }}</p>{% endif %}
+          </div>
+          {% endif %}
+        </div>
+        {% endif %}
+{% endblock %}
+
+{% block meta_end %}
+        {% if fields.pagination %}<span class="pagination">{{ fields.pagination }}</span>{% endif %}
+{% endblock %}

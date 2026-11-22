@@ -14,7 +14,7 @@ from app.formats import Format, dimensions
 from app.rendering import resolve_fields, resolve_template
 from app.schemas import MAX_FIELD_LENGTH, RenderRequest
 from app.templating import TemplateRegistry
-from tests.conftest import BUILTIN_DIR, CONTENT, image_base64, svg_base64
+from tests.conftest import BUILTIN_DIR, CONTENT, QUOTE, image_base64, svg_base64
 
 pytestmark = [pytest.mark.requires_chromium, pytest.mark.asyncio(loop_scope="module")]
 
@@ -89,7 +89,7 @@ IMAGE_PROBE = """
 
 REGISTRY = TemplateRegistry.load(BUILTIN_DIR)
 FORMATS = [(spec.id, fmt) for spec in REGISTRY.specs for fmt in spec.formats]
-COPY_FIELDS = ("subline", "body", "cta")
+COPY_FIELDS = ("subline", "body", "cta", "quote")
 COPY = [
     (template, fmt, field)
     for template, fmt in FORMATS
@@ -100,6 +100,7 @@ WITH_PAGINATION = [
     (template, fmt) for template, fmt in FORMATS if "pagination" in REGISTRY.get(template).fields
 ]
 CONTENT_FORMATS = REGISTRY.get(CONTENT).formats
+QUOTE_FORMATS = REGISTRY.get(QUOTE).formats
 # Fields that are not running text: the handle and the pagination never wrap, and icon_color
 # picks a color.
 NOT_TEXT = frozenset({"handle", "pagination", "icon_color"})
@@ -112,6 +113,7 @@ GRAPHICS = {
     "icon": {"icon": ICON},
     "tall-image": {"image": f"data:image/png;base64,{image_base64((600, 3000))}"},
 }
+PORTRAIT = f"data:image/png;base64,{image_base64((400, 400))}"
 
 # hyphenate() chops a run without break points every 12 characters, and at the floor sizes a
 # chunk of these capitals fills a line on its own, so they are the tallest text a field holds.
@@ -133,10 +135,12 @@ def limit_of(field: str, template: str | None = None) -> int:
 
 
 def text_fields(template: str, copy: bool = True) -> list[str]:
+    """The running text fields of a template; without copy, only the copy it requires."""
+    spec = REGISTRY.get(template)
     return [
         field
-        for field in REGISTRY.get(template).fields
-        if field not in NOT_TEXT and (copy or field not in COPY_FIELDS)
+        for field in spec.fields
+        if field not in NOT_TEXT and (copy or field not in COPY_FIELDS or field in spec.required)
     ]
 
 
@@ -239,7 +243,7 @@ async def measure(
 async def test_template_driven_field_cap_matches_the_schema():
     # resolve_fields applies MAX_FIELD_LENGTH to fields a template declares without a
     # typed counterpart, so it must not be looser than the typed limits it backs up.
-    for field in ("headline", "subline", "handle", "topic", "pagination"):
+    for field in ("headline", "subline", "handle", "topic", "pagination", "author", "role"):
         assert limit_of(field) <= MAX_FIELD_LENGTH
 
 
@@ -256,8 +260,8 @@ async def test_running_text_at_every_limit_fits_and_stays_readable(page, registr
 async def test_the_headline_at_its_limit_stays_readable_next_to_unfitted_fields(
     page, registry, template, fmt
 ):
-    # Without the copy, but with a field that is not fitted, such as the cover's topic, which
-    # takes its room from the headline.
+    # Without the optional copy, but with a field that is not fitted, such as the cover's topic,
+    # which takes its room from the headline.
     fields = text_fields(template, copy=False)
     requested = {field: filled(limit_of(field, template)) for field in fields}
     result = await measure(page, registry, template, fmt, **requested)
@@ -293,11 +297,30 @@ async def test_unbroken_runs_without_the_copy_are_not_clipped(page, registry, te
     assert_stage_holds(result)
 
 
+@pytest.mark.parametrize("headline", [True, False], ids=["with-headline", "quote-only"])
+@pytest.mark.parametrize("run", [None, *UNBROKEN_RUNS], ids=lambda run: run or "running")
+@pytest.mark.parametrize("fmt", QUOTE_FORMATS, ids=case_id)
+async def test_a_quote_with_a_portrait_fits_every_field_at_its_limit(
+    page, registry, fmt, run, headline
+):
+    # The portrait narrows the author and the role, which are not fitted and so take their
+    # room from the quote.
+    fields = [field for field in text_fields(QUOTE) if headline or field != "headline"]
+    requested = {
+        field: run * limit_of(field, QUOTE) if run else filled(limit_of(field, QUOTE))
+        for field in fields
+    }
+    result = await measure(page, registry, QUOTE, fmt, image=PORTRAIT, **requested)
+    if headline:
+        assert_fits(result["headline"], None if run else HEADLINE_READABLE)
+    assert_fits(result["quote"], None if run else COPY_READABLE)
+    assert_stage_holds(result)
+
+
 @pytest.mark.parametrize(("template", "fmt"), WITH_PAGINATION, ids=case_id)
 async def test_pagination_at_its_limit_stays_on_the_handle_row(page, registry, template, fmt):
     # The handle gives way with an ellipsis; the pagination must stay whole at the right edge.
-    requested = {
-        "headline": "Kurz",
+    requested = dict.fromkeys(registry.get(template).required, "Kurz") | {
         "pagination": "W" * limit_of("pagination"),
         "handle": "W" * limit_of("handle"),
     }

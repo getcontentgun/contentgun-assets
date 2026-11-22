@@ -1,0 +1,23 @@
+name = "quote"
+description = "Quote card for testimonials, customer voices and quotes from talks: an amber quotation mark, an optional headline as the hook, the quote, and under it the author with role or source and an optional round portrait from the image. Send the quote without quotation marks; the card draws its own."
+formats = ["4:5", "1:1"]
+fields = ["headline", "quote", "author", "role", "handle", "pagination"]
+required = ["quote"]
+image = true
+
+[limits]
+headline = 80
+
+[defaults]
+headline = ""
+author = ""
+role = ""
+handle = ""
+pagination = ""
+
+[samples]
+headline = "Vier Stunden pro Woche gespart"
+quote = "Seit wir unsere Karten aus Vorlagen bauen, geht kein Beitrag mehr in die dritte Abstimmungsrunde."
+author = "Maria Beispiel"
+role = "Leiterin Marketing, Beispiel GmbH"
+handle = "@contentgun"

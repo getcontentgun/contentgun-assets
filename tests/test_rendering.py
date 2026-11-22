@@ -20,6 +20,7 @@ from tests.conftest import (
     CAROUSEL,
     CONTENT,
     COVER,
+    QUOTE,
     SHOWCASE,
     image_base64,
     svg_base64,
@@ -245,6 +246,52 @@ async def test_missing_headline_returns_400(client):
     response = await client.post("/v1/render", headers=AUTH, json={"format": "4:5"})
     assert response.status_code == 400
     assert response.json()["error"] == f"Field 'headline' is required by template {CARD!r}."
+
+
+async def test_a_quote_without_a_headline_reaches_the_renderer(client):
+    response = await client.post(
+        "/v1/render", headers=AUTH, json={"template": QUOTE, "quote": "Kurz und klar."}
+    )
+    assert response.status_code == 503
+    assert response.json()["error"] == "Renderer is not available."
+
+
+async def test_a_quote_with_every_field_and_a_portrait_reaches_the_renderer(client):
+    response = await client.post(
+        "/v1/render",
+        headers=AUTH,
+        json={
+            "template": QUOTE,
+            "format": "1:1",
+            "headline": "Vier Stunden gespart",
+            "quote": "Kurz und klar.",
+            "author": "Maria Beispiel",
+            "role": "Leiterin Marketing",
+            "handle": "@contentgun",
+            "pagination": "2/3",
+            "image": image_base64(),
+        },
+    )
+    assert response.status_code == 503
+
+
+async def test_a_quote_card_without_a_quote_returns_400(client):
+    response = await client.post(
+        "/v1/render", headers=AUTH, json={"template": QUOTE, "headline": "Hallo"}
+    )
+    assert response.status_code == 400
+    assert response.json()["error"] == f"Field 'quote' is required by template {QUOTE!r}."
+
+
+@pytest.mark.parametrize(("field", "limit"), [("author", 60), ("role", 80)])
+async def test_author_and_role_over_their_limits_return_400(client, field, limit):
+    response = await client.post(
+        "/v1/render",
+        headers=AUTH,
+        json={"template": QUOTE, "quote": "Kurz.", field: "x" * (limit + 1)},
+    )
+    assert response.status_code == 400
+    assert response.json()["error"].startswith(f"{field}:")
 
 
 def test_a_template_without_a_headline_takes_a_request_without_one(tmp_path):

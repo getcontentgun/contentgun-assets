@@ -29,7 +29,7 @@ with the right ones without a code change:
 |---------|-------------|------|
 | Sample | every template | The template's `[samples]` |
 | Required fields only | templates with optional fields in `[samples]` | Every optional sample field set to empty, which removes its element |
-| With an image | templates with `image = true` and no fallback image, today `demo/carousel-content` | `image_url` pointing at the sample image |
+| With an image | templates with `image = true` and no fallback image, today `demo/carousel-content` and `demo/quote` | `image_url` pointing at the sample image |
 | With an icon | templates with `icon = true`, today `demo/carousel-content` | `icon_url` pointing at the sample icon |
 | With an icon in the text color | templates with `icon = true` that declare `icon_color` | The same, plus `icon_color=text` |
 

@@ -8,7 +8,7 @@ import pytest
 from PIL import Image
 
 from app.images import decode_icon, decode_image
-from tests.conftest import BUNDLE, CARD, CONTENT, SHOWCASE, registry_of
+from tests.conftest import BUNDLE, CARD, CONTENT, QUOTE, SHOWCASE, registry_of
 
 
 async def test_debug_html_renders_without_auth(client, app):
@@ -153,13 +153,14 @@ async def test_every_link_of_the_debug_index_works(client):
 async def test_debug_index_offers_graphics_only_where_a_template_takes_them(client):
     links = await index_links(client)
     assert templates_with(links, "icon_url") == {CONTENT}
-    assert templates_with(links, "image_url") == {CONTENT}
+    assert templates_with(links, "image_url") == {CONTENT, QUOTE}
     assert templates_with(links, "icon_color") == {CONTENT}
 
 
 async def test_debug_index_shows_a_template_with_its_required_fields_only(client):
     links = await index_links(client)
     assert f"/v1/debug/html?template={CONTENT}&format=4:5&body=&pagination=&handle=" in links
+    assert f"/v1/debug/html?template={QUOTE}&format=1:1&headline=&author=&role=&handle=" in links
 
 
 async def test_debug_index_groups_the_templates_by_bundle(client, app):

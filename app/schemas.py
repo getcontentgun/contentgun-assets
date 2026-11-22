@@ -26,6 +26,9 @@ class RenderRequest(BaseModel):
     topic: str | None = Field(default=None, max_length=60)
     # Never wrapped, so this cap is what keeps it on the handle's row inside the card.
     pagination: str | None = Field(default=None, max_length=16)
+    # Neither is fitted, so their worst case at these caps is part of the quote's room.
+    author: str | None = Field(default=None, max_length=60)
+    role: str | None = Field(default=None, max_length=80)
     # Deliberately uncapped here: the size is checked in bytes by app/images.py, and the
     # field length limit that applies to template fields would reject any real image.
     image: str | None = None

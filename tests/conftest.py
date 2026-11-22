@@ -9,6 +9,7 @@ COVER = f"{BUNDLE}/carousel-cover"
 CONTENT = f"{BUNDLE}/carousel-content"
 CLOSING = f"{BUNDLE}/carousel-closing"
 CAROUSEL = (COVER, CONTENT, CLOSING)
+QUOTE = f"{BUNDLE}/quote"
 # The faces the bundle's CSS draws: the headlines in the display face, every other text in the
 # text face.
 DISPLAY_FACE = ("Space Grotesk", 700)

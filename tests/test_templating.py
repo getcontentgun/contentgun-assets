@@ -24,6 +24,7 @@ from tests.conftest import (
     CONTENT,
     COVER,
     DISPLAY_FACE,
+    QUOTE,
     SHOWCASE,
     TEXT_FACE,
     template_toml,
@@ -54,7 +55,7 @@ def load_spec(tmp_path, toml: str):
 
 
 def test_registry_finds_every_template(registry):
-    assert registry.ids == [CARD, CARD_IMAGE, CLOSING, CONTENT, COVER]
+    assert registry.ids == [CARD, CARD_IMAGE, CLOSING, CONTENT, COVER, QUOTE]
 
 
 def test_shared_partials_are_not_a_template(registry):
@@ -90,7 +91,7 @@ def test_required_field_without_a_sample_raises(tmp_path, samples):
 def test_image_and_icon_capabilities(registry):
     images = {spec.id for spec in registry.specs if spec.accepts_image}
     icons = {spec.id for spec in registry.specs if spec.accepts_icon}
-    assert images == {CARD_IMAGE, CONTENT}
+    assert images == {CARD_IMAGE, CONTENT, QUOTE}
     assert icons == {CONTENT}
 
 

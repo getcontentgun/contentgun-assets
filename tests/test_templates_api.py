@@ -7,6 +7,7 @@ from tests.conftest import (
     CLOSING,
     CONTENT,
     COVER,
+    QUOTE,
     SHOWCASE,
     registry_of,
 )
@@ -17,7 +18,14 @@ async def test_templates_lists_every_template(client):
     assert response.status_code == 200
     body = response.json()
     assert body["ok"] is True
-    assert [t["id"] for t in body["templates"]] == [CARD, CARD_IMAGE, CLOSING, CONTENT, COVER]
+    assert [t["id"] for t in body["templates"]] == [
+        CARD,
+        CARD_IMAGE,
+        CLOSING,
+        CONTENT,
+        COVER,
+        QUOTE,
+    ]
 
 
 async def test_every_template_names_its_bundle(client):
@@ -61,6 +69,7 @@ async def test_image_capability_is_reported(client):
         CLOSING: False,
         CONTENT: True,
         COVER: False,
+        QUOTE: True,
     }
 
 
@@ -73,7 +82,15 @@ async def test_icon_capability_is_reported(client):
         CLOSING: False,
         CONTENT: True,
         COVER: False,
+        QUOTE: False,
     }
+
+
+async def test_the_quote_requires_only_the_quote(client):
+    body = (await client.get("/v1/templates", headers=AUTH)).json()
+    quote = next(t for t in body["templates"] if t["id"] == QUOTE)
+    assert quote["required"] == ["quote"]
+    assert quote["fields"] == ["headline", "quote", "author", "role", "handle", "pagination"]
 
 
 async def test_carousel_content_lists_the_icon_colour_with_its_default(client):
@@ -94,9 +111,10 @@ async def test_a_template_lists_its_own_limits_and_formats(showcase_client):
     assert [bundle["name"] for bundle in body["bundles"]] == sorted([BUNDLE, "mini"])
 
 
-async def test_the_templates_of_the_bundle_keep_the_service_limits(client):
+async def test_only_the_quote_tightens_a_service_limit(client):
     body = (await client.get("/v1/templates", headers=AUTH)).json()
-    assert all(t["limits"] == {} for t in body["templates"])
+    limits = {t["id"]: t["limits"] for t in body["templates"] if t["limits"]}
+    assert limits == {QUOTE: {"headline": 80}}
 
 
 async def test_samples_are_not_part_of_the_listing(client):
