@@ -1,6 +1,7 @@
 import logging
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
+from difflib import get_close_matches
 from typing import Literal
 
 from app.browser import FontNotLoaded, RenderBusy, RenderTimeout, RenderUnavailable
@@ -9,7 +10,14 @@ from app.errors import ApiError
 from app.fetching import checked_url, url_subject
 from app.files import Kind, TenantUploads, storage_missing
 from app.formats import Format, dimensions
-from app.images import decode_icon, decode_image, file_data_uri, icon_data_uri, image_data_uri
+from app.images import (
+    decode_icon,
+    decode_image,
+    file_data_uri,
+    icon_data_uri,
+    icon_file_data_uri,
+    image_data_uri,
+)
 from app.schemas import MAX_FIELD_LENGTH, RESERVED_KEYS, RenderRequest
 from app.templating import TemplateRegistry, TemplateSpec, UnknownTemplateError
 
@@ -79,8 +87,12 @@ def _given(raw: str | None) -> bool:
     return raw is not None and bool(raw.strip())
 
 
-def _sources(kind: Kind) -> tuple[str, str, str]:
-    return kind, f"{kind}_upload", f"{kind}_url"
+ICON_NAME = "icon_name"
+
+
+def _sources(kind: Kind) -> tuple[str, ...]:
+    named = (ICON_NAME,) if kind == "icon" else ()
+    return kind, f"{kind}_upload", f"{kind}_url", *named
 
 
 def _source(payload: RenderRequest, kind: Kind) -> str | None:
@@ -97,9 +109,11 @@ def reject_image_and_icon(image: str | None, icon: str | None) -> None:
 
 
 def reject_two_sources(payload: RenderRequest, kind: Kind) -> None:
-    if sum(_given(getattr(payload, name)) for name in _sources(kind)) > 1:
-        inline, upload, url = _sources(kind)
-        raise ApiError(400, f"Send the {kind} in one field only: {inline}, {upload} or {url}.")
+    names = _sources(kind)
+    if sum(_given(getattr(payload, name)) for name in names) > 1:
+        raise ApiError(
+            400, f"Send the {kind} in one field only: {', '.join(names[:-1])} or {names[-1]}."
+        )
 
 
 def _accept(spec: TemplateSpec, kind: Kind) -> None:
@@ -109,7 +123,7 @@ def _accept(spec: TemplateSpec, kind: Kind) -> None:
 
 
 def _pending(payload: RenderRequest, kind: Kind) -> Pending | None:
-    _, upload, url = _sources(kind)
+    upload, url = f"{kind}_upload", f"{kind}_url"
     if _given(getattr(payload, upload)):
         return Pending(kind, "upload", getattr(payload, upload).strip())
     if _given(getattr(payload, url)):
@@ -163,6 +177,29 @@ def resolve_icon(spec: TemplateSpec, raw: str | None) -> str | None:
     if not spec.accepts_icon:
         raise ApiError(400, f"Template {spec.id!r} does not accept an icon.")
     return decode_icon(raw)
+
+
+def resolve_icon_name(
+    registry: TemplateRegistry, spec: TemplateSpec, name: str | None
+) -> str | None:
+    """The icon of the bundle's set an icon_name asks for."""
+    if not _given(name):
+        return None
+    _accept(spec, "icon")
+    wanted = name.strip()
+    icons = registry.icons(spec)
+    if not icons:
+        raise ApiError(
+            400,
+            f"Template {spec.id!r} has no icons to name. "
+            "Send the SVG as icon, icon_upload or icon_url.",
+        )
+    path = icons.get(wanted)
+    if path is None:
+        close = get_close_matches(wanted, list(icons), n=3)
+        hint = f" Close: {', '.join(close)}." if close else " GET /v1/templates lists them."
+        raise ApiError(400, f"Unknown icon {wanted!r} for template {spec.id!r}.{hint}")
+    return icon_file_data_uri(path)
 
 
 def resolve_code(
@@ -244,6 +281,8 @@ def check_render(registry: TemplateRegistry, payload: RenderRequest) -> CheckedR
     pending_kind = None if pending is None else pending.kind
     image = None if pending_kind == "image" else resolve_image(spec, payload.image)
     icon = None if pending_kind == "icon" else resolve_icon(spec, payload.icon)
+    if icon is None and pending is None:
+        icon = resolve_icon_name(registry, spec, payload.icon_name)
     return CheckedRender(
         spec=spec, format=fmt, fields=fields, image=image, icon=icon, pending=pending, code=code
     )

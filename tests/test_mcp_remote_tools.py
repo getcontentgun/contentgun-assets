@@ -207,6 +207,7 @@ async def test_render_card_stores_the_card_and_answers_with_its_url_and_a_previe
         ("icon_url", "https://example.com/icon.svg", "icon_url", "https://example.com/icon.svg"),
         ("icon_upload", "up_def", "icon_upload", "up_def"),
         ("icon_svg", SVG, "icon", base64.b64encode(SVG.encode()).decode()),
+        ("icon_name", "rocket", "icon_name", "rocket"),
     ],
 )
 async def test_each_image_or_icon_source_lands_in_the_body(argument, value, key, sent):
@@ -512,6 +513,7 @@ async def test_the_render_tools_describe_the_limits_and_take_one_kind_of_source(
         "icon_svg",
         "icon_url",
         "icon_upload",
+        "icon_name",
     }
 
 

@@ -17,6 +17,8 @@ from cards import (
     CODE_FIELD,
     DEFAULT_PAGINATION,
     HIGHLIGHT_LINES_FIELD,
+    ICON_NAME_FIELD,
+    ICONS,
     LANGUAGE_FIELD,
     LIMITS,
     LINE_NUMBERS_FIELD,
@@ -53,8 +55,10 @@ The handle is never filled in: pass the account's handle, for example @contentgu
 template is a template id from list_templates, written bundle/template; without one the service \
 uses its default template. Every template's description says what it is for and how to fill \
 its fields. Fields other than headline, subline and handle go into extra_fields. image_path only \
-works with a template that accepts an image, icon_path, an SVG pictogram, only with one that \
-accepts an icon; list_templates reports both as accepts_image and accepts_icon.
+works with a template that accepts an image, icon_name and icon_path, an SVG pictogram, only with \
+one that accepts an icon; list_templates reports both as accepts_image and accepts_icon.
+
+{ICONS} icon_path is for a template that lists no icons.
 
 {CODE}
 
@@ -71,9 +75,10 @@ post.
 
 {CAROUSEL_WRITING}
 
-A content slide can carry a graphic under its text: icon_path for an SVG pictogram, drawn in \
-the accent color or, with icon_color 'text', in the text color, or image_path for a picture \
-shown as it is. Give either every content slide an icon or none of them.
+A content slide can carry a graphic under its text: a pictogram, drawn in the accent color or, \
+with icon_color 'text', in the text color, or image_path for a picture shown as it is. {ICONS} \
+Only for a content slide whose template lists no icons, pass an SVG as icon_path, and give either \
+every content slide one or none of them.
 
 {LIMITS} A carousel has at most {MAX_CAROUSEL_SLIDES} slides; Instagram's publishing API takes \
 at most 10."""
@@ -152,6 +157,7 @@ def build_server(tools: Tools) -> MCPServer:
                 f"inside one of these folders: {image_roots}."
             ),
         ] = None,
+        icon_name: Annotated[str | None, Field(description=ICON_NAME_FIELD)] = None,
         code: Annotated[str | None, Field(description=CODE_FIELD)] = None,
         language: Annotated[str | None, Field(description=LANGUAGE_FIELD)] = None,
         line_numbers: Annotated[bool | None, Field(description=LINE_NUMBERS_FIELD)] = None,
@@ -174,6 +180,7 @@ def build_server(tools: Tools) -> MCPServer:
                 format=format,
                 image_path=image_path,
                 icon_path=icon_path,
+                icon_name=icon_name,
                 code=code,
                 language=language,
                 line_numbers=line_numbers,

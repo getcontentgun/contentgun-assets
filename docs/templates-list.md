@@ -38,7 +38,8 @@ discover what `POST /v1/render` accepts.
       "limits": {},
       "accepts_image": false,
       "accepts_icon": false,
-      "accepts_code": false
+      "accepts_code": false,
+      "icons": []
     },
     {
       "id": "demo/card-image",
@@ -52,7 +53,8 @@ discover what `POST /v1/render` accepts.
       "limits": {},
       "accepts_image": true,
       "accepts_icon": false,
-      "accepts_code": false
+      "accepts_code": false,
+      "icons": []
     },
     {
       "id": "demo/carousel-closing",
@@ -69,7 +71,8 @@ discover what `POST /v1/render` accepts.
       "limits": {},
       "accepts_image": false,
       "accepts_icon": false,
-      "accepts_code": false
+      "accepts_code": false,
+      "icons": []
     },
     {
       "id": "demo/carousel-content",
@@ -86,7 +89,8 @@ discover what `POST /v1/render` accepts.
       "limits": {},
       "accepts_image": true,
       "accepts_icon": true,
-      "accepts_code": false
+      "accepts_code": false,
+      "icons": []
     },
     {
       "id": "demo/carousel-cover",
@@ -103,7 +107,8 @@ discover what `POST /v1/render` accepts.
       "limits": {},
       "accepts_image": false,
       "accepts_icon": false,
-      "accepts_code": false
+      "accepts_code": false,
+      "icons": []
     },
     {
       "id": "demo/code",
@@ -120,7 +125,8 @@ discover what `POST /v1/render` accepts.
       "limits": { "headline": 60 },
       "accepts_image": false,
       "accepts_icon": false,
-      "accepts_code": true
+      "accepts_code": true,
+      "icons": []
     },
     {
       "id": "demo/quote",
@@ -137,7 +143,8 @@ discover what `POST /v1/render` accepts.
       "limits": { "headline": 80 },
       "accepts_image": true,
       "accepts_icon": false,
-      "accepts_code": false
+      "accepts_code": false,
+      "icons": []
     }
   ]
 }
@@ -158,5 +165,5 @@ curl -s -H "Authorization: Bearer $API_KEY" http://127.0.0.1:8010/v1/templates
 - `defaults` are the template's own fallbacks and apply whenever the request omits a field.
 - The `[samples]` table in a `template.toml` is not part of this response. It is preview content for [`GET /v1/debug/html`](debug-html.md), not a fallback the render endpoint ever uses.
 - `fields` is the allow-list for the render request. Any other field is a `400`.
-- `accepts_image` says whether the template takes the `image` parameter of the render request, `accepts_icon` whether it takes `icon`, and `accepts_code` whether it takes `code`, which such a template requires. All three are capabilities, not fields, so they do not appear in `fields`. A template that takes an image may also declare a fallback image from its bundle's `assets/`, which the render uses when the request sends none; one that takes an icon may not, or a card with an icon would carry the fallback image as well.
+- `accepts_image` says whether the template takes the `image` parameter of the render request, `accepts_icon` whether it takes `icon`, and `accepts_code` whether it takes `code`, which such a template requires. All three are capabilities, not fields, so they do not appear in `fields`. `icons` lists, sorted, the names a render request may send as `icon_name` to a template that takes icons: the icon set of its bundle, see [Icons](bundles/README.md#icons). `demo` has none, so its lists are empty. A template that takes an image may also declare a fallback image from its bundle's `assets/`, which the render uses when the request sends none; one that takes an icon may not, or a card with an icon would carry the fallback image as well.
 - `limits` holds the character limits a template sets on top of the service-wide ones, from the `[limits]` table of its `template.toml`; in the `demo` bundle `demo/quote` and `demo/code` set one each, 80 and 60 characters for their headline. A field not listed keeps the service-wide limit: headline 140, subline 200, handle, topic, author and filename 60, role 80, pagination 16, every other field 200.

@@ -15,8 +15,9 @@ DEFAULT_PAGINATION = "{page}/{pages}"
 LIST_TEMPLATES = """\
 List the templates the contentgun-assets service renders: for every template its id \
 (bundle/template), its bundle, description, formats with pixel sizes, the fields it accepts, \
-which are required, their defaults, and whether it takes an image, an icon or code. Call it \
-whenever you are unsure which template or fields to use, instead of guessing."""
+which are required, their defaults, whether it takes an image, an icon or code, and the names \
+of the icons it offers. Call it whenever you are unsure which template or fields to use, instead \
+of guessing."""
 
 LIMITS = """\
 Limits the service enforces: headline up to 140 characters; subline, body, cta and quote up to \
@@ -29,6 +30,15 @@ A template that accepts code, which list_templates reports as accepts_code, need
 source as plain text, with its language, a short name such as python, javascript, typescript, \
 bash, json, sql or diff, and optionally line_numbers and highlight_lines. The service highlights \
 it. Cut the code down to the lines that make the point, and send it without Markdown fences."""
+
+ICONS = """\
+A template whose list_templates entry lists icons takes icon_name, one of those names, for its \
+pictogram. Give every content slide the icon whose name fits the point it makes, unless it shows \
+a picture or the user wants a slide without a pictogram."""
+
+ICON_NAME_FIELD = (
+    "A pictogram from the template's own set: one of the names list_templates lists under icons."
+)
 
 CODE_FIELD = "Source code as plain text, for a template that accepts code."
 LANGUAGE_FIELD = (

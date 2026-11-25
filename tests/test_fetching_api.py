@@ -134,9 +134,10 @@ async def test_an_icon_from_a_url_meets_the_svg_rules(client, web):
 )
 async def test_a_graphic_comes_from_one_source(client, web, kind, sources):
     response = await render(client, template=CONTENT, **sources)
+    named = ", icon_url or icon_name" if kind == "icon" else f" or {kind}_url"
     assert outcome(response) == (
         400,
-        f"Send the {kind} in one field only: {kind}, {kind}_upload or {kind}_url.",
+        f"Send the {kind} in one field only: {kind}, {kind}_upload{named}.",
     )
     assert web.lookups == []
 

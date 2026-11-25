@@ -31,6 +31,7 @@ async def list_templates(tenant: CurrentTenant) -> TemplatesResponse:
                 accepts_image=spec.accepts_image,
                 accepts_icon=spec.accepts_icon,
                 accepts_code=spec.accepts_code,
+                icons=sorted(registry.icons(spec)),
             )
         )
 

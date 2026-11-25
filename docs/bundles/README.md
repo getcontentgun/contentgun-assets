@@ -11,6 +11,7 @@ of its own; everything a card shows comes from the bundle of its template.
   bundle.toml          name, description, font faces and font checks
   fonts/               woff2 files and their license texts
   assets/              logos, fallback images
+    icons/             the icon set, one SVG per icon, named by its file
   _base/               optional: shared skeleton and CSS
   <template>/
     template.toml
@@ -159,12 +160,24 @@ A class without a rule in the CSS simply draws in the text color. The code is ne
 caps of 14 lines and 48 columns stand in for `| hyphenate`, so a template's floor for the code
 must hold 14 lines of 48 columns, line numbers included, see [Code](../render.md#code).
 
+## Icons
+
+A bundle may bring an icon set: every `.svg` file in `assets/icons/` is an icon, and its file name
+without `.svg` is the name a request sends as `icon_name` to a template of the bundle that sets
+`icon = true`. Other files there, such as a license, are left alone. Every template of the bundle
+that takes icons offers the whole set, and `GET /v1/templates` lists its names as `icons`.
+
+- A name follows the naming rule, `^[a-z0-9][a-z0-9-]*$`.
+- Every icon meets the [SVG rules](../render.md#image-or-icon-on-a-content-slide) of an icon in a request, up to 256 KB.
+- A card tints every opaque part of an icon in one color. A white area meant to cover a line behind it turns into a blob of that color, which no check catches; white shapes inside a `clipPath`, as Figma exports them, are fine. `/v1/debug/icons?bundle=<bundle>` shows the set tinted, see [debug-icons.md](../debug-icons.md).
+- Any set that meets these rules works, Bootstrap Icons, Lucide or icons of your own, copied flat into the folder; the name is what a caller chooses by, so `light-bulb.svg` serves better than `icon-237.svg`.
+
 ## Isolation
 
 A template reaches the files of its own bundle and nothing else:
 
 - `{% extends %}` and `{% include %}` resolve inside the bundle's folder, so `_base/base.html.j2` names the bundle's own skeleton. Jinja refuses `..` in a template name, and the loader also refuses a file whose real path leaves the bundle, as through a symlink.
-- `fallback_image` and `inline_svg("file.svg")` resolve inside the bundle's `assets/`, with the same check.
+- `fallback_image`, the icons and `inline_svg("file.svg")` resolve inside the bundle's `assets/`, with the same check.
 - A page carries only the fonts of its own bundle, and its screenshot waits only for its bundle's checks.
 
 A bundle linked into the root as a whole works: everything inside it is measured against the
@@ -183,6 +196,7 @@ message begins with the file at fault and names the bundle or the template:
 - a bundle has no template, or a template lacks `template.toml` or `template.html.j2`
 - a `template.toml` breaks one of its rules, see the table above
 - a fallback image is missing, outside the bundle's `assets/`, or not a PNG, JPEG or WebP file
+- an icon of the set has a name against the rule or breaks the SVG rules
 - a template sets `code = true` without a `[code_sample]`, has one without `code = true`, or has a code sample that a render request could not send
 
 The checks of the tenants come on top, a tenant without a default template it can use among them;
@@ -192,7 +206,7 @@ pytest, so a broken bundle is reported first.
 
 ## What is read when
 
-`bundle.toml`, every `template.toml`, the font files and the fallback images are read once, at
+`bundle.toml`, every `template.toml`, the font files, the fallback images and the icons are read once, at
 startup, like the tenants file. `template.css` is read on every request, and the `.j2` files go
 through Jinja's template cache, which reloads a changed file; a CSS or template edit therefore
 needs only a browser reload on the debug route, while a change to a `.toml` file, a font or a

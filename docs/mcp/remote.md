@@ -57,17 +57,23 @@ an upload, see below; without it, or without a code execution environment, the u
 
 ### Images and icons
 
-A card or a content slide takes at most one of five sources:
+A card or a content slide takes at most one of six sources:
 
 | Parameter | Source |
 |---|---|
+| `icon_name` | The name of an icon of the template's own set, as `list_templates` lists it under `icons` |
 | `image_url` | A public `https` address of a PNG, JPEG or WebP, which the service fetches |
 | `image_upload` | The `upload_id` of a PNG, JPEG or WebP sent with `create_upload` |
 | `icon_svg` | The markup of an SVG pictogram, which Claude draws itself |
 | `icon_url` | A public `https` address of an SVG |
 | `icon_upload` | The `upload_id` of an SVG sent with `create_upload` |
 
-`icon_svg` and `image_url` work without anything else. A file attached to the chat goes through
+For a template that lists icons, the descriptions tell Claude to give every content slide the icon
+whose name fits its point, unless it shows a picture or the user wants a slide without one, and to
+draw or link a pictogram only for a template without a set, see
+[Icons of a bundle](../render.md#icons-of-a-bundle). The service itself never requires an icon.
+
+`icon_name`, `icon_svg` and `image_url` work without anything else. A file attached to the chat goes through
 `create_upload`: Claude runs the returned command in its code execution environment, which takes
 an outside address only when it is allowed there. An owner of the Claude organization adds the
 host of `PUBLIC_FILES_URL`, for example `files.contentgun.de`, under Settings, Capabilities,

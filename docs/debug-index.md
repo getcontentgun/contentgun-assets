@@ -34,7 +34,8 @@ with the right ones without a code change:
 | With an icon in the text color | templates with `icon = true` that declare `icon_color` | The same, plus `icon_color=text` |
 | Plain code | templates with `code = true` whose `[code_sample]` has line numbers or highlighted lines, today `demo/code` | `line_numbers=false` and an empty `highlight_lines` |
 
-A template with a fallback image shows it in its sample already, so it gets no image row.
+A template with a fallback image shows it in its sample already, so it gets no image row. A
+bundle with an icon set links its [icon page](debug-icons.md) under its description.
 
 ## Sample files
 

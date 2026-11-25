@@ -9,6 +9,7 @@ from pydantic import Field
 
 from cards import (
     DEFAULT_PAGINATION,
+    ICON_NAME_FIELD,
     CarouselClosing,
     CarouselCover,
     SlideText,
@@ -30,6 +31,7 @@ RESERVED = {
     "format": "format",
     "image": "image_path",
     "icon": "icon_path",
+    "icon_name": "icon_name",
     "headline": "headline",
     "subline": "subline",
     "handle": "handle",
@@ -43,6 +45,7 @@ PDF_FILE = "carousel.pdf"
 
 
 class CarouselSlide(SlideText):
+    icon_name: str | None = Field(default=None, description=ICON_NAME_FIELD)
     icon_path: str | None = Field(
         default=None,
         description="An SVG pictogram under the text, drawn in one brand color.",
@@ -97,6 +100,7 @@ class Tools:
         format: str | None = None,
         image_path: str | None = None,
         icon_path: str | None = None,
+        icon_name: str | None = None,
         code: str | None = None,
         language: str | None = None,
         line_numbers: bool | None = None,
@@ -105,6 +109,7 @@ class Tools:
         overwrite: bool = False,
     ) -> Rendering:
         target = output_file(output_path, self.config.output_root, overwrite)
+        named = self._named(image_path, icon_path, icon_name)
         graphic = self._graphic(image_path, icon_path)
         body = card_body(
             headline=headline,
@@ -121,6 +126,7 @@ class Tools:
         )
         if graphic is not None:
             body[graphic.key] = graphic.encoded
+        body.update(named)
 
         rendered = await self._client.render(body)
         self._write(target, rendered.data)
@@ -180,8 +186,10 @@ class Tools:
             )
 
         graphics: list[Graphic | None] = []
+        names: list[dict[str, str]] = []
         for page, slide in enumerate(slides, start=2):
             try:
+                names.append(self._named(slide.image_path, slide.icon_path, slide.icon_name))
                 graphics.append(self._graphic(slide.image_path, slide.icon_path))
             except AssetsError as exc:
                 raise AssetsError(f"Slide {page}: {exc}") from None
@@ -192,7 +200,8 @@ class Tools:
             slides=slides,
             closing=closing,
             graphics=[
-                None if graphic is None else {graphic.key: graphic.encoded} for graphic in graphics
+                named or (None if graphic is None else {graphic.key: graphic.encoded})
+                for graphic, named in zip(graphics, names, strict=True)
             ],
             label=label,
             handle=handle,
@@ -237,6 +246,8 @@ class Tools:
         for target, body in zip(targets, bodies, strict=True):
             suffix = f", pagination {body['pagination']}" if "pagination" in body else ""
             suffix += "".join(f", {key}" for key in ("image", "icon") if key in body)
+            if "icon_name" in body:
+                suffix += f", icon {body['icon_name']}"
             lines.append(f"- {target.name}: {body['template']}{suffix}")
         if pdf_data is not None:
             lines.append(f"- {PDF_FILE}: all {pages} slides, one page each")
@@ -246,6 +257,16 @@ class Tools:
                 f"Older slides from an earlier run are still in the folder: {', '.join(stale)}."
             )
         return Rendering(summary="\n".join(lines), preview=contact_sheet(pngs))
+
+    @staticmethod
+    def _named(
+        image_path: str | None, icon_path: str | None, icon_name: str | None
+    ) -> dict[str, str]:
+        if not icon_name:
+            return {}
+        if image_path or icon_path:
+            raise AssetsError("Pass one of image_path, icon_path and icon_name, not two.")
+        return {"icon_name": icon_name}
 
     def _graphic(self, image_path: str | None, icon_path: str | None) -> Graphic | None:
         if image_path and icon_path:

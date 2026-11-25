@@ -1,3 +1,4 @@
+import dataclasses
 import math
 import re
 import tomllib
@@ -10,10 +11,11 @@ from jinja2 import Environment, FileSystemLoader, StrictUndefined, TemplateNotFo
 from markupsafe import Markup, escape
 
 from app.code import Code, CodeError, CodeSample
+from app.errors import ApiError
 from app.fonts import FontSet, load_font_set
 from app.formats import Format, dimensions, filename_token
 from app.hyphenation import hyphenate
-from app.images import ACCEPTED, file_data_uri
+from app.images import ACCEPTED, file_data_uri, icon_file_data_uri, verify_xml_parser
 from app.schemas import MAX_FIELD_LENGTH
 
 BUNDLE_FILE = "bundle.toml"
@@ -22,6 +24,8 @@ CSS_FILE = "template.css"
 META_FILE = "template.toml"
 FONTS_DIR = "fonts"
 ASSETS_DIR = "assets"
+ICONS_DIR = "icons"
+ICON_SUFFIX = ".svg"
 
 BUNDLE_KEYS = frozenset({"name", "description", "fonts"})
 CODE_SAMPLE_KEYS = frozenset({"code", "language", "line_numbers", "highlight_lines"})
@@ -68,6 +72,7 @@ class Bundle:
     fonts: FontSet
     specs: dict[str, TemplateSpec]
     environment: Environment
+    icons: dict[str, Path] = dataclasses.field(default_factory=dict)
 
 
 def skipped(directory: Path) -> bool:
@@ -239,6 +244,35 @@ def _load_spec(directory: Path, bundle: str, bundle_dir: Path) -> TemplateSpec:
     )
 
 
+def _load_icons(bundle_dir: Path, bundle: str) -> dict[str, Path]:
+    """The icon set of a bundle by name: every SVG file in assets/icons/, each checked like the
+    icon of a request. Other files there, such as a license, are left alone."""
+    folder = bundle_dir / ASSETS_DIR / ICONS_DIR
+    if not folder.is_dir():
+        return {}
+    if not _inside(folder, bundle_dir):
+        raise RuntimeError(f"{folder}: The icons of bundle {bundle!r} lie outside the bundle.")
+    # Also here and not only in create_app(): bin/sync and bin/measure load bundles without it.
+    verify_xml_parser()
+    icons = {}
+    for path in sorted(folder.iterdir()):
+        if not path.is_file() or path.suffix != ICON_SUFFIX:
+            continue
+        name = path.stem
+        if not NAME.fullmatch(name):
+            raise RuntimeError(f"{path}: The icon name {name!r} must use {NAME_RULE}.")
+        if not _inside(path, folder):
+            raise RuntimeError(f"{path}: Icon {name!r} lies outside bundle {bundle!r}.")
+        try:
+            icon_file_data_uri(path)
+        except OSError as exc:
+            raise RuntimeError(f"{path}: The icon cannot be read: {exc.strerror or exc}.") from None
+        except ApiError as exc:
+            raise RuntimeError(f"{path}: {exc.message}") from None
+        icons[name] = path
+    return icons
+
+
 def highlight(text: str, phrase: str) -> Markup:
     """Hyphenate the text and wrap the first whole-word, case-insensitive occurrence of the
     phrase in <em>. Text without that phrase is returned hyphenated and unmarked."""
@@ -342,6 +376,8 @@ def _load_bundle(directory: Path) -> Bundle:
 
     fonts = load_font_set(raw.get("fonts"), bundle_dir / FONTS_DIR, source, name)
 
+    icons = _load_icons(bundle_dir, name)
+
     reserved = {FONTS_DIR, ASSETS_DIR}
     directories = (
         path
@@ -362,6 +398,7 @@ def _load_bundle(directory: Path) -> Bundle:
         fonts=fonts,
         specs=specs,
         environment=_environment(bundle_dir),
+        icons=icons,
     )
 
 
@@ -415,6 +452,10 @@ class TemplateRegistry:
             return self._specs[template_id]
         except KeyError:
             raise UnknownTemplateError(template_id) from None
+
+    def icons(self, spec: TemplateSpec) -> dict[str, Path]:
+        """The icons a request may name for the template: its bundle's set, if it takes icons."""
+        return self._bundles[spec.bundle].icons if spec.accepts_icon else {}
 
     def font_checks(self, spec: TemplateSpec) -> tuple[str, ...]:
         return self._bundles[spec.bundle].fonts.checks

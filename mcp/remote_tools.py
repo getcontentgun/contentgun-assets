@@ -8,6 +8,7 @@ from pydantic import Field
 from cards import (
     CAROUSEL_TEMPLATES,
     DEFAULT_PAGINATION,
+    ICON_NAME_FIELD,
     CarouselClosing,
     CarouselCover,
     SlideText,
@@ -40,16 +41,17 @@ RESERVED: dict[str, str | None] = {
     "image": "image_url or image_upload",
     "image_url": "image_url",
     "image_upload": "image_upload",
-    "icon": "icon_svg, icon_url or icon_upload",
+    "icon": "icon_name, icon_svg, icon_url or icon_upload",
     "icon_url": "icon_url",
     "icon_upload": "icon_upload",
+    "icon_name": "icon_name",
     "code": "code",
     "language": "language",
     "line_numbers": "line_numbers",
     "highlight_lines": "highlight_lines",
     "output": None,
 }
-GRAPHICS = ("image_url", "image_upload", "icon_svg", "icon_url", "icon_upload")
+GRAPHICS = ("image_url", "image_upload", "icon_svg", "icon_url", "icon_upload", "icon_name")
 NO_PREVIEW = "There is no preview, but the URL works."
 DOWNLOAD = (
     "To show the result in the chat, run this in your code execution environment and share the "
@@ -58,6 +60,7 @@ DOWNLOAD = (
 
 
 class ContentSlide(SlideText):
+    icon_name: str | None = Field(default=None, description=ICON_NAME_FIELD)
     image_url: str | None = Field(
         default=None,
         description="A picture under the text: a public https address of a PNG, JPEG or WebP.",
@@ -95,9 +98,10 @@ def graphic_fields(
     icon_svg: str | None = None,
     icon_url: str | None = None,
     icon_upload: str | None = None,
+    icon_name: str | None = None,
 ) -> dict[str, str]:
     """The body keys of the one image or icon a card or slide gets, or none."""
-    values = (image_url, image_upload, icon_svg, icon_url, icon_upload)
+    values = (image_url, image_upload, icon_svg, icon_url, icon_upload, icon_name)
     given = {name: value for name, value in zip(GRAPHICS, values, strict=True) if value}
     if len(given) > 1:
         raise AssetsError(f"Pass one image or icon, not {' and '.join(given)} together.")
@@ -112,6 +116,8 @@ def graphic_fields(
 def _source(body: dict[str, Any]) -> str:
     if body.keys() & {"image", "image_url", "image_upload"}:
         return "image"
+    if "icon_name" in body:
+        return f"icon {body['icon_name']}"
     if body.keys() & {"icon", "icon_url", "icon_upload"}:
         return "icon"
     return "none"
@@ -162,13 +168,16 @@ class RemoteTools:
         icon_svg: str | None = None,
         icon_url: str | None = None,
         icon_upload: str | None = None,
+        icon_name: str | None = None,
         code: str | None = None,
         language: str | None = None,
         line_numbers: bool | None = None,
         highlight_lines: list[int] | None = None,
     ) -> Result:
         client = self._client.for_tenant(tenant)
-        graphic = graphic_fields(image_url, image_upload, icon_svg, icon_url, icon_upload)
+        graphic = graphic_fields(
+            image_url, image_upload, icon_svg, icon_url, icon_upload, icon_name
+        )
         body = card_body(
             headline=headline,
             subline=subline,
@@ -235,6 +244,7 @@ class RemoteTools:
                         slide.icon_svg,
                         slide.icon_url,
                         slide.icon_upload,
+                        slide.icon_name,
                     )
                 )
             except AssetsError as exc:

@@ -34,6 +34,7 @@ says where, see [Output as a URL](#output-as-a-url).
 | `icon_upload` | string | no | The id of an uploaded SVG icon, in place of `icon`. Needs storage |
 | `image_url` | string | no | An `https` URL of the image, in place of `image`, up to 2048 characters. The service fetches it itself, see [Images and icons from a URL](#images-and-icons-from-a-url) |
 | `icon_url` | string | no | An `https` URL of the SVG icon, in place of `icon`, fetched the same way |
+| `icon_name` | string | no | The name of an icon of the template's own set, in place of `icon`, up to 64 characters. `GET /v1/templates` lists the names as `icons`; no template of `demo` has a set. See [Icons of a bundle](#icons-of-a-bundle) |
 | `code` | string | per template | Source code for a template that sets `code = true`, today `demo/code`, which requires it; `GET /v1/templates` reports such a template with `accepts_code`. At most 14 lines of 48 columns after normalization, never hyphenated or wrapped, see [Code](#code) |
 | `language` | string | no | The language to highlight the code in, a short name of Pygments such as `python`, `javascript`, `typescript`, `bash`, `json`, `yaml`, `sql`, `html` or `diff`, in any case. Up to 40 characters. Omitted means plain text without highlighting. An unknown name is a `400` |
 | `line_numbers` | boolean | no | `true` puts the line numbers in front of the lines. Defaults to `false`. A string or a number is a `400` |
@@ -57,8 +58,9 @@ than a silently ignored field, and `GET /v1/templates` reports the capabilities 
 
 Each of them comes from one of three sources: base64 in the body (`image`, `icon`), an
 [upload](#uploads) (`image_upload`, `icon_upload`) or a [URL](#images-and-icons-from-a-url)
-(`image_url`, `icon_url`). Two sources for the same graphic are a `400`, and so is an image from
-any source next to an icon from any source.
+(`image_url`, `icon_url`). An icon can also come from the set of the template's bundle by name
+(`icon_name`), see [Icons of a bundle](#icons-of-a-bundle). Two sources for the same graphic are
+a `400`, and so is an image from any source next to an icon from any source.
 
 `demo/card-image` places the image full-bleed, cropped to the format with `object-fit: cover`,
 under a slate gradient that darkens towards the bottom, where its text sits. The gradient is part
@@ -351,9 +353,28 @@ Bootstrap Icons and Lucide meet every rule as they are.
 { "template": "demo/carousel-content", "format": "4:5", "headline": "Erst das Ziel, dann der Text", "body": "Leg vorher fest, was ein Beitrag erreichen soll.", "icon": "<base64 SVG>", "icon_color": "accent", "pagination": "2/5", "handle": "@contentgun" }
 ```
 
+### Icons of a bundle
+
+A bundle can bring a set of icons in `assets/icons/`, one SVG file per icon, named by its file
+name, see [bundles/README.md](bundles/README.md#icons). A template of that bundle that takes icons
+takes each of them by name, `"icon_name": "rocket"`, and `GET /v1/templates` lists the names as
+`icons` of the template. `demo` brings no set. An icon stays optional: a card that takes icons
+renders without one when the request names none. The icons go through the same
+[SVG rules](#image-or-icon-on-a-content-slide) as an icon in the body when the bundle loads, so a
+name never fails at render time for its file.
+
+| Name | Result |
+|------|--------|
+| A name of the set | That icon, tinted like any icon |
+| Any other name | `400` "Unknown icon 'rockets' for template 'acme/carousel-content'. Close: rocket.", with up to three close names, or a pointer to `GET /v1/templates` when none is close |
+| Any name, for a template whose bundle has no set | `400` that names `icon`, `icon_upload` and `icon_url` instead |
+
+In n8n, `"icon_name": "{{ $json.icon_name }}"` is all a flow needs; the names never change at
+runtime, and `/v1/debug/icons?bundle=<bundle>` shows the whole set.
+
 ### Icons from an icon library
 
-The service keeps no icon library: the caller sends the SVG itself. In n8n, an **HTTP Request**
+For a template whose bundle has no set of its own, the caller sends the SVG itself. In n8n, an **HTTP Request**
 node fetches it by name before the render call, for example from Bootstrap Icons on jsDelivr,
 with the version pinned so that a name always gives the same icon:
 

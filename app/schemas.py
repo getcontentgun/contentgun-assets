@@ -41,6 +41,7 @@ class RenderRequest(BaseModel):
     icon_upload: str | None = Field(default=None, max_length=64)
     image_url: str | None = Field(default=None, max_length=MAX_URL_LENGTH)
     icon_url: str | None = Field(default=None, max_length=MAX_URL_LENGTH)
+    icon_name: str | None = Field(default=None, max_length=64)
     # Not template fields either: code outgrows the cap of a field, and app/code.py checks it in
     # lines and columns.
     code: str | None = Field(default=None, max_length=MAX_CODE_LENGTH)
@@ -60,6 +61,7 @@ RESERVED_KEYS = frozenset(
         "icon_upload",
         "image_url",
         "icon_url",
+        "icon_name",
         "code",
         "language",
         "line_numbers",
@@ -135,6 +137,7 @@ class TemplateInfo(BaseModel):
     accepts_image: bool = False
     accepts_icon: bool = False
     accepts_code: bool = False
+    icons: list[str] = Field(default_factory=list)
 
 
 class BundleInfo(BaseModel):

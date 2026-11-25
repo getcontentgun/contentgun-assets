@@ -12,11 +12,13 @@ from pydantic import ValidationError
 from app.code import Code
 from app.errors import ApiError
 from app.formats import Format
+from app.images import icon_file_data_uri
 from app.rendering import (
     reject_image_and_icon,
     resolve_code,
     resolve_fields,
     resolve_format,
+    resolve_icon_name,
     resolve_image,
     resolve_template,
 )
@@ -33,6 +35,7 @@ ROUTE_PARAMETERS = frozenset(
         "format",
         "image_url",
         "icon_url",
+        "icon_name",
         "code",
         "language",
         "line_numbers",
@@ -90,6 +93,9 @@ INDEX = Environment(autoescape=True, trim_blocks=True, lstrip_blocks=True).from_
     {% for bundle in bundles %}
     <h2>Bundle {{ bundle.name }}</h2>
     <p>{{ bundle.description }}</p>
+    {% if bundle.icons %}
+    <p><a href="{{ bundle.icons_href }}">Its {{ bundle.icons }} icons</a></p>
+    {% endif %}
     {% for template in bundle.templates %}
     <h3>{{ template.id }}</h3>
     <p>{{ template.description }}</p>
@@ -196,13 +202,81 @@ async def debug_index(request: Request, tenant: str | None = None) -> HTMLRespon
                     "variants": variants,
                 }
             )
+        icons_query = ({"tenant": named} if named else {}) | {"bundle": bundle.name}
         bundles.append(
-            {"name": bundle.name, "description": bundle.description, "templates": templates}
+            {
+                "name": bundle.name,
+                "description": bundle.description,
+                "templates": templates,
+                "icons": len(bundle.icons),
+                "icons_href": f"{request.app.url_path_for('debug_icons')}?{urlencode(icons_query)}",
+            }
         )
     return HTMLResponse(
         INDEX.render(tenants=[], tenant=named, bundles=bundles, samples=samples),
         headers=NO_STORE,
     )
+
+
+ICONS = Environment(autoescape=True, trim_blocks=True, lstrip_blocks=True).from_string(
+    """<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Icons of bundle {{ bundle }}</title>
+    <style>
+      body {
+        margin: 40px;
+        font: 14px/1.4 system-ui, sans-serif;
+        color: #222222;
+        background: #f7f7f5;
+      }
+      h1 { font-size: 24px; }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+        gap: 16px;
+      }
+      figure { margin: 0; padding: 12px; text-align: center; background: #ffffff; }
+      img { height: 72px; max-width: 100%; filter: url(#tint); }
+      figcaption { margin-top: 8px; overflow-wrap: anywhere; }
+    </style>
+  </head>
+  <body>
+    <svg width="0" height="0" style="position: absolute" aria-hidden="true">
+      <filter id="tint" color-interpolation-filters="sRGB">
+        <feFlood flood-color="#222222" />
+        <feComposite in2="SourceAlpha" operator="in" />
+      </filter>
+    </svg>
+    <h1>Icons of bundle {{ bundle }}</h1>
+    <p>Drawn the way a card draws them: every opaque part in one color.</p>
+    <div class="grid">
+      {% for icon in icons %}
+      <figure><img src="{{ icon.uri }}" alt="" /><figcaption>{{ icon.name }}</figcaption></figure>
+      {% endfor %}
+    </div>
+  </body>
+</html>
+"""
+)
+
+
+@router.get("/icons", response_class=HTMLResponse)
+async def debug_icons(
+    request: Request, bundle: str | None = None, tenant: str | None = None
+) -> HTMLResponse:
+    registry = _tenant(request.app.state.tenants, tenant).registry
+    names = [item.name for item in registry.bundles]
+    if bundle not in names:
+        raise ApiError(
+            400, f"Name a bundle with the parameter bundle. Bundles: {', '.join(names)}."
+        )
+    icons = [
+        {"name": name, "uri": icon_file_data_uri(path)}
+        for name, path in sorted(registry.bundle(bundle).icons.items())
+    ]
+    return HTMLResponse(ICONS.render(bundle=bundle, icons=icons), headers=NO_STORE)
 
 
 @router.get("/samples/icon.svg")
@@ -277,6 +351,7 @@ async def debug_html(
     format: Format | None = None,
     image_url: str | None = None,
     icon_url: str | None = None,
+    icon_name: str | None = None,
     code: str | None = None,
     language: str | None = None,
     line_numbers: bool | None = None,
@@ -308,9 +383,14 @@ async def debug_html(
     # A base64 image or icon cannot be typed into a URL, so the design loop points at one
     # instead. Only the designer's own browser fetches it; the service never does. Without an
     # image the page falls back exactly like the screenshot does.
-    reject_image_and_icon(image_url, icon_url)
+    if icon_url and (icon_name or "").strip():
+        raise ApiError(400, "Send the icon in one field only: icon_url or icon_name.")
+    reject_image_and_icon(image_url, icon_url or icon_name)
     image = image_url if image_url and spec.accepts_image else resolve_image(spec, None)
-    icon = icon_url if icon_url and spec.accepts_icon else None
+    if icon_url and spec.accepts_icon:
+        icon = icon_url
+    else:
+        icon = resolve_icon_name(registry, spec, icon_name)
     block = _code(spec, code, language, line_numbers, highlight_lines)
 
     html = registry.render_html(

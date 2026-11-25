@@ -30,6 +30,8 @@ from cards import (
     CODE_FIELD,
     DEFAULT_PAGINATION,
     HIGHLIGHT_LINES_FIELD,
+    ICON_NAME_FIELD,
+    ICONS,
     LANGUAGE_FIELD,
     LIMITS,
     LINE_NUMBERS_FIELD,
@@ -78,12 +80,14 @@ host, the code execution environment may not reach this domain: tell the user th
 added under "Additional allowed domains" in the settings of Claude, and show the exact output of \
 the command."""
 
-GRAPHIC_SOURCES = """\
+GRAPHIC_SOURCES = f"""\
 A template that accepts an image takes image_url, a public https address of a PNG, JPEG or WebP, \
 or image_upload, the upload_id of a file sent with create_upload. A template that accepts an \
-icon takes icon_svg, the markup of an SVG pictogram you draw yourself with a viewBox and without \
-text, icon_url or icon_upload. list_templates reports both as accepts_image and accepts_icon. \
-Pass at most one of these five."""
+icon takes icon_name, icon_svg, icon_url or icon_upload. list_templates reports both as \
+accepts_image and accepts_icon. Pass at most one of these six.
+
+{ICONS} Only for a template that lists no icons, draw a pictogram yourself as icon_svg, the \
+markup of an SVG with a viewBox and without text, or pass icon_url or icon_upload."""
 
 SHOW_IN_CHAT = """\
 The preview is for you to check the result; it does not appear in your answer. The answer ends \
@@ -125,10 +129,11 @@ document post, and the command downloads it as well.
 
 {CAROUSEL_WRITING}
 
-A content slide can carry a graphic under its text: a pictogram from icon_svg, icon_url or \
-icon_upload, drawn in the accent color or, with icon_color 'text', in the text color; or a \
-picture shown as it is, from image_url or image_upload. Give either every content slide a \
-pictogram or none of them.
+A content slide can carry a graphic under its text: a pictogram, drawn in the accent color or, \
+with icon_color 'text', in the text color; or a picture shown as it is, from image_url or \
+image_upload. {ICONS} Only for a content slide whose template lists no icons, draw the pictogram \
+yourself as icon_svg or pass icon_url or icon_upload, and give either every content slide one or \
+none of them.
 
 {LIMITS} A carousel has at most {MAX_CAROUSEL_SLIDES} slides; Instagram's publishing API takes \
 at most 10."""
@@ -249,6 +254,7 @@ def _add_tools(server: MCPServer, tools: RemoteTools) -> None:
         icon_upload: Annotated[
             str | None, Field(description="The upload_id of an SVG sent with create_upload.")
         ] = None,
+        icon_name: Annotated[str | None, Field(description=ICON_NAME_FIELD)] = None,
         code: Annotated[str | None, Field(description=CODE_FIELD)] = None,
         language: Annotated[str | None, Field(description=LANGUAGE_FIELD)] = None,
         line_numbers: Annotated[bool | None, Field(description=LINE_NUMBERS_FIELD)] = None,
@@ -274,6 +280,7 @@ def _add_tools(server: MCPServer, tools: RemoteTools) -> None:
                 icon_svg=icon_svg,
                 icon_url=icon_url,
                 icon_upload=icon_upload,
+                icon_name=icon_name,
                 code=code,
                 language=language,
                 line_numbers=line_numbers,

@@ -312,6 +312,25 @@ async def test_content_slides_carry_their_graphics_into_png_and_pdf(tools, servi
     assert "- 03.png: brand/carousel-content, pagination 3/5, image" in result.summary
 
 
+async def test_a_content_slide_names_an_icon_of_the_set(tools, service, pictures):
+    slides = carousel(3)
+    slides["slides"][0] = CarouselSlide(headline="Punkt 1", icon_name="rocket")
+    result = await tools.render_carousel(output_dir="c", **slides)
+    assert service.bodies[1]["icon_name"] == "rocket"
+    assert "icon" not in service.bodies[1]
+    assert "- 02.png: brand/carousel-content, pagination 2/5, icon rocket" in result.summary
+
+
+async def test_an_icon_name_next_to_a_file_is_refused(tools, service, pictures):
+    (pictures / "icon.svg").write_bytes(b"<svg/>")
+    with pytest.raises(AssetsError) as excinfo:
+        await tools.render_card(
+            output_path="a.png", icon_path=str(pictures / "icon.svg"), icon_name="rocket"
+        )
+    assert str(excinfo.value) == "Pass one of image_path, icon_path and icon_name, not two."
+    assert service.bodies == []
+
+
 async def test_slide_graphics_are_checked_before_any_request(tools, service, pictures):
     (pictures / "icon.svg").write_bytes(b"<svg/>")
     (pictures / "photo.png").write_bytes(b"png")

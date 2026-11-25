@@ -180,6 +180,15 @@ def icon_data_uri(data: bytes, subject: str = "Field 'icon'", other: str = "imag
     return _data_uri(SVG_TYPE, data)
 
 
+@lru_cache(maxsize=1024)
+def icon_file_data_uri(path: Path) -> str:
+    """An icon of a bundle's set, checked like a request's icon. Cached, like a fallback image."""
+    data = path.read_bytes()
+    if len(data) > icon_limit():
+        raise ApiError(413, f"Icon {path.stem!r} must be at most {readable_size(icon_limit())}.")
+    return icon_data_uri(data, f"Icon {path.stem!r}")
+
+
 def decode_icon(raw: str) -> str:
     if raw.lstrip().startswith("<"):
         raise ApiError(400, "Field 'icon' must be base64-encoded. Encode the SVG markup first.")

@@ -70,7 +70,8 @@ the built-in ones. It never uses `INTERNAL_KEY`, which belongs to the [remote MC
 
 No arguments. Calls `GET /v1/templates` and returns its `{"templates": [...]}` unchanged: id
 (`<bundle>/<template>`), bundle, name, description, formats with pixel sizes, fields, required
-fields, defaults, template-specific `limits`, `accepts_image` and `accepts_icon`. Read-only.
+fields, defaults, template-specific `limits`, `accepts_image`, `accepts_icon` and the names of the
+template's `icons`. Read-only.
 
 ### `render_card`
 
@@ -87,6 +88,7 @@ id, plus a JPEG preview 540 px wide.
 | `format` | no | Omitted means the template's first format |
 | `image_path` | no | An image inside `ASSETS_IMAGE_ROOTS`, sent base64-encoded. Only templates with `accepts_image`; the template's description says what it does with the image |
 | `icon_path` | no | An SVG pictogram inside `ASSETS_IMAGE_ROOTS`, sent base64-encoded. Only templates with `accepts_icon`. Its color goes into `extra_fields` as `icon_color`. Together with `image_path` it is refused |
+| `icon_name` | no | An icon of the template's own set, as `list_templates` lists it under `icons`, see [Icons of a bundle](../render.md#icons-of-a-bundle). Together with `image_path` or `icon_path` it is refused |
 | `code` | no | Source code for a template with `accepts_code`, such as `demo/code`. Passed through; the service checks and highlights it, see [Code](../render.md#code) |
 | `language` | no | The language of the code, a short name of Pygments such as `python`. Passed through |
 | `line_numbers` | no | `true` numbers the lines of the code. Passed through |
@@ -102,7 +104,7 @@ of one bundle:
 | File | Template | Content |
 |------|----------|---------|
 | `01.png` | `<bundle>/carousel-cover` | `cover.headline`, `cover.topic`, `cover.subline` |
-| `02.png` to the second last | `<bundle>/carousel-content` | `headline` and `body` of each entry in `slides`, in order, and its `icon_path` or `image_path` |
+| `02.png` to the second last | `<bundle>/carousel-content` | `headline` and `body` of each entry in `slides`, in order, and its `icon_name`, `icon_path` or `image_path` |
 | last | `<bundle>/carousel-closing` | `closing.headline`, `closing.cta` |
 
 A bundle offers carousels by having templates with these three names.
@@ -110,7 +112,7 @@ A bundle offers carousels by having templates with these three names.
 | Parameter | Required | Description |
 |-----------|----------|-------------|
 | `output_dir` | yes | Relative to `ASSETS_OUTPUT_ROOT`, or absolute inside it, but not the root itself. Created if missing |
-| `cover`, `slides`, `closing` | yes | `slides` holds 1 to 18 entries, so a carousel has 3 to 20 slides. Each entry may carry an `icon_path` or an `image_path`, both inside `ASSETS_IMAGE_ROOTS`, not both |
+| `cover`, `slides`, `closing` | yes | `slides` holds 1 to 18 entries, so a carousel has 3 to 20 slides. Each entry may carry an `icon_name`, an `icon_path` or an `image_path`, the files inside `ASSETS_IMAGE_ROOTS`, only one of them |
 | `handle` | no | The same on every slide, never filled in |
 | `format` | no | The same on every slide, `4:5` by default |
 | `pagination` | no | Pattern for content and closing slides with `{page}` and `{pages}`, default `{page}/{pages}`: `2/7`. `{page} von {pages}` gives `2 von 7`; an empty string leaves the pagination out. The cover counts as page 1 and shows the swipe arrow instead |
