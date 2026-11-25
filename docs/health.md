@@ -6,7 +6,7 @@ Liveness probe. No authentication.
 
 | Status | Body | Description |
 |--------|------|-------------|
-| `200` | `{"ok": true, "version": "0.2.0", "browser": "ready", "templates": ["demo/card", "demo/card-image", "demo/carousel-closing", "demo/carousel-content", "demo/carousel-cover"]}` | Service is up and Chromium is connected. `templates` holds the ids of the built-in templates |
+| `200` | `{"ok": true, "version": "0.3.0", "browser": "ready", "templates": ["demo/card", "demo/card-image", "demo/carousel-closing", "demo/carousel-content", "demo/carousel-cover"]}` | Service is up and Chromium is connected. `templates` holds the ids of the built-in templates |
 | `503` | `{"ok": false, "error": "Browser not ready."}` | Chromium is not connected |
 
 ## Example
