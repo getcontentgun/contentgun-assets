@@ -61,11 +61,12 @@ QUIET_LOGGERS = ("httpx", "mcp")
 INSTRUCTIONS = """\
 ContentGun renders social media cards and Instagram carousels with the templates of the \
 signed-in team. list_templates shows the templates and their fields. render_card renders one \
-card, render_carousel a whole carousel; both return URLs and a preview image: look at the \
-preview before you report the result, and give the user the URLs. To put an image file from the \
-conversation on a card, call create_upload, run the curl command it returns in your code \
-execution environment, then pass the upload_id. whoami shows which address and team are signed \
-in."""
+card, render_carousel a whole carousel; both return URLs, a preview image for you to check the \
+result, and a curl command that downloads the files: look at the preview, run the command in \
+your code execution environment and share the downloaded files with the user, so that they see \
+the result in the chat, and give the user the URLs. To put an image file from the conversation \
+on a card, call create_upload, run the curl command it returns in your code execution \
+environment, then pass the upload_id. whoami shows which address and team are signed in."""
 
 CREATE_UPLOAD = """\
 Get a URL that takes one image or icon file for a card. Run the returned command in your code \
@@ -84,8 +85,18 @@ icon takes icon_svg, the markup of an SVG pictogram you draw yourself with a vie
 text, icon_url or icon_upload. list_templates reports both as accepts_image and accepts_icon. \
 Pass at most one of these five."""
 
+SHOW_IN_CHAT = """\
+The preview is for you to check the result; it does not appear in your answer. The answer ends \
+with a curl command that downloads the files: run it in your code execution environment and \
+share the downloaded files with the user, so that they see the result in the chat. Without a \
+code execution environment, give the user the URLs. If the command cannot reach the host of the \
+URLs, give the user the URLs, and tell them once in the conversation that the result appears in \
+the chat when that host is added under "Additional allowed domains" in the settings of Claude."""
+
 RENDER_CARD = f"""\
-Render one card as a PNG. Returns its URL and a preview.
+Render one card as a PNG. Returns its URL, a preview and a command that downloads the card.
+
+{SHOW_IN_CHAT}
 
 {LIMITS} What reads well: a headline of about six words and a subline of about eight; the full \
 limits fit, but look like a wall of text.
@@ -106,8 +117,11 @@ Render an Instagram carousel: the cover first, one content slide per entry in sl
 closing slide last. The slides use the templates {CAROUSEL_COVER}, {CAROUSEL_CONTENT} and \
 {CAROUSEL_CLOSING} of one bundle. Every slide gets the same format and handle; the content and \
 closing slides show the pagination, the cover shows a swipe arrow. Returns the URL of every \
-slide, in order, and one preview image with all slides. With pdf, the same slides also come as \
-one PDF, one page each, which LinkedIn takes as a document post.
+slide, in order, one preview image with all slides, and a command that downloads every slide. \
+With pdf, the same slides also come as one PDF, one page each, which LinkedIn takes as a \
+document post, and the command downloads it as well.
+
+{SHOW_IN_CHAT}
 
 {CAROUSEL_WRITING}
 

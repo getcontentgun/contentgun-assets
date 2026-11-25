@@ -31,8 +31,8 @@ The page and the mail are in German for a browser that prefers German, otherwise
 | Tool | What it does |
 |---|---|
 | `list_templates` | The templates of the tenant, as `GET /v1/templates` lists them |
-| `render_card` | One card, stored by the service; answers with its URL, its size, until when the URL works, and a preview |
-| `render_carousel` | Cover, content slides and closing slide, optionally also as one PDF; answers with every URL in order and one preview of all slides |
+| `render_card` | One card, stored by the service; answers with its URL, its size, until when the URL works, a preview, and the `curl` command that downloads the card |
+| `render_carousel` | Cover, content slides and closing slide, optionally also as one PDF; answers with every URL in order, one preview of all slides, and the `curl` command that downloads every file |
 | `create_upload` | A URL that takes one file, and the `curl -T` command that sends it |
 | `whoami` | The signed-in address, its tenant, and until when the sign-in lasts |
 
@@ -45,6 +45,15 @@ every render answers that storage is not configured. The model gets the public U
 under `PUBLIC_FILES_URL` of the service. The server reads the PNG back through `ASSETS_BASE_URL`
 for the preview, so the preview does not depend on the public address. When that read fails, the
 answer has the URL without a preview.
+
+The preview is for the model, which checks the result with it; claude.ai does not show it in
+Claude's answer. A result reaches the chat as a file instead: every answer ends with a `curl`
+command that downloads it, and the descriptions of both tools tell Claude to run the command in
+its code execution environment and share the files, which claude.ai shows in the chat with a
+download. The command of a carousel saves the slides as `carousel-<id>-01.png` onward, in their
+order, and the PDF as `carousel-<id>.pdf`, where `<id>` is the start of the cover's request id,
+so two carousels in one chat do not overwrite each other. The download needs the same entry as
+an upload, see below; without it, or without a code execution environment, the user gets the URLs.
 
 ### Images and icons
 
@@ -64,7 +73,9 @@ an outside address only when it is allowed there. An owner of the Claude organiz
 host of `PUBLIC_FILES_URL`, for example `files.contentgun.de`, under Settings, Capabilities,
 "Allow network egress", "Additional allowed domains". Without that entry the command fails with
 `CONNECT tunnel failed, response 403`, and the description of `create_upload` tells Claude to say
-so. The same entry lets Claude download a result into its environment and offer it as a file.
+so. The same entry lets Claude download a result and show it in the chat as a file; when that
+download fails, the descriptions of `render_card` and `render_carousel` tell Claude to say once
+that the entry is missing.
 
 `extra_fields` takes the further fields a template declares, but none of the keys the request
 sets itself, such as `template`, `image`, `code` or `output`.

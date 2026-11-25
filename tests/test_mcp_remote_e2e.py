@@ -103,7 +103,7 @@ async def test_a_carousel_with_a_pictogram_and_a_pdf(service):
         result = await tool(remote.client, token, "render_carousel", arguments)
     assert result["isError"] is False, result
     text = result["content"][0]["text"]
-    assert len(STORED_PNG.findall(text)) == 4
+    assert len(set(STORED_PNG.findall(text))) == 4
     pdf_url = re.search(rf"{re.escape(FILES_URL)}/o/default/\S+\.pdf", text).group(0)
     document = await fetch(service, pdf_url)
     assert document.headers["content-type"] == "application/pdf"

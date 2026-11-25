@@ -51,6 +51,10 @@ RESERVED: dict[str, str | None] = {
 }
 GRAPHICS = ("image_url", "image_upload", "icon_svg", "icon_url", "icon_upload")
 NO_PREVIEW = "There is no preview, but the URL works."
+DOWNLOAD = (
+    "To show the result in the chat, run this in your code execution environment and share the "
+    "downloaded files with the user:"
+)
 
 
 class ContentSlide(SlideText):
@@ -115,6 +119,11 @@ def _source(body: dict[str, Any]) -> str:
 
 def _kilobytes(size: int) -> str:
     return f"{size / 1024:.0f} KB"
+
+
+def _download(files: list[tuple[str, str]]) -> str:
+    """One curl command that saves every URL under its name, in order."""
+    return "curl -fsS " + " ".join(f'-o {name} "{url}"' for name, url in files)
 
 
 class RemoteTools:
@@ -196,6 +205,7 @@ class RemoteTools:
         ]
         if preview is None:
             lines.append(NO_PREVIEW)
+        lines += [DOWNLOAD, f'curl -fsS -O "{stored.url}"']
         return Result("\n".join(lines), preview)
 
     async def render_carousel(
@@ -281,6 +291,14 @@ class RemoteTools:
         lines.append(f"The URLs work until {min(stored.expires_at for stored in results)}.")
         if sheet is None:
             lines.append(NO_PREVIEW)
+        stem = f"carousel-{first.request_id[:8]}"
+        files = [
+            (f"{stem}-{number:02d}.png", stored.url)
+            for number, stored in enumerate(results, start=1)
+        ]
+        if document is not None:
+            files.append((f"{stem}.pdf", document.url))
+        lines += [DOWNLOAD, _download(files)]
         return Result("\n".join(lines), sheet)
 
     async def _carousel_bundle(self, client: AssetsClient) -> str:

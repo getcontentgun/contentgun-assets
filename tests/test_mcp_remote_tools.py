@@ -12,7 +12,7 @@ from PIL import Image
 from app.schemas import RESERVED_KEYS
 from cards import LIMITS
 from remote_server import RENDER_CARD, RENDER_CAROUSEL
-from remote_tools import NO_PREVIEW, REMOTE, RESERVED
+from remote_tools import DOWNLOAD, NO_PREVIEW, REMOTE, RESERVED
 from tests.mcp_remote import (
     ADDRESS,
     INTERNAL_KEY,
@@ -103,7 +103,7 @@ class FakeService:
                     "bytes": len(PNG),
                     "expires_at": f"2026-11-19T12:00:{number:02d}Z",
                 },
-                headers={"x-request-id": f"request-{number}"},
+                headers={"x-request-id": f"{number:08x}-0000-4000-8000-000000000000"},
             )
         if path == "/v1/document":
             body = json.loads(request.content)
@@ -184,6 +184,7 @@ async def test_render_card_stores_the_card_and_answers_with_its_url_and_a_previe
     text, image = result["content"]
     assert f"(1080x1350, 0 KB): {STORED}01.png" in text["text"]
     assert "The URL works until 2026-11-19T12:00:01Z." in text["text"]
+    assert text["text"].splitlines()[-2:] == [DOWNLOAD, f'curl -fsS -O "{STORED}01.png"']
     assert image["mimeType"] == "image/jpeg"
     assert Image.open(BytesIO(base64.b64decode(image["data"]))).width == 540
     fetch = service.requests[-1]
@@ -406,7 +407,25 @@ async def test_a_carousel_renders_every_slide_and_lists_their_urls_in_order():
     assert lines[2] == f"2. {STORED}02.png (demo/carousel-content, pagination 2/4, icon)"
     assert lines[5] == f"PDF with all 4 slides, one page each: {STORED}document.pdf"
     assert lines[6] == "The URLs work until 2026-11-19T12:00:01Z."
+    assert lines[7:] == [
+        DOWNLOAD,
+        f'curl -fsS -o carousel-00000001-01.png "{STORED}01.png" '
+        f'-o carousel-00000001-02.png "{STORED}02.png" '
+        f'-o carousel-00000001-03.png "{STORED}03.png" '
+        f'-o carousel-00000001-04.png "{STORED}04.png" '
+        f'-o carousel-00000001.pdf "{STORED}document.pdf"',
+    ]
     assert Image.open(BytesIO(base64.b64decode(image["data"]))).width == 4 * 270 + 3 * 8
+
+
+async def test_without_a_pdf_the_command_downloads_the_slides_only():
+    service = FakeService()
+    async with connected(service) as (remote, token):
+        result = await tool(remote.client, token, "render_carousel", CAROUSEL)
+    command = result["content"][0]["text"].splitlines()[-1]
+    assert command.startswith(f'curl -fsS -o carousel-00000001-01.png "{STORED}01.png" ')
+    assert command.endswith(f'-o carousel-00000001-04.png "{STORED}04.png"')
+    assert ".pdf" not in command
 
 
 async def test_the_carousel_bundle_is_the_one_that_offers_carousels():
