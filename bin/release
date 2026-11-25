@@ -48,8 +48,8 @@ latest="${latest:-0.0.0}"
 if [[ "${current}" != "${latest}" ]]; then
     suggested="${current}"
 else
-    IFS=. read -r major minor patch <<<"${latest}"
-    suggested="${major}.${minor}.$((patch + 1))"
+    IFS=. read -r major minor _ <<<"${latest}"
+    suggested="${major}.$((minor + 1)).0"
 fi
 
 echo "Version in the code: ${current}"
